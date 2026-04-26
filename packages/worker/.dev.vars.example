@@ -1,0 +1,3 @@
+# Bearer token shared with the Bun supervisor. Generate with:
+#   openssl rand -hex 32
+BUN_SHARED_TOKEN=replace-me-with-32-bytes-hex

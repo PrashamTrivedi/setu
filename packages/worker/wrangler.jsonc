@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kanban-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PROJECT_DO",
+        "class_name": "ProjectDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ProjectDO"]
+    }
+  ],
+  "vars": {
+    "ALLOWED_PROJECTS": "demo"
+  }
+  // Add when paired with a real machine:
+  //   "kv_namespaces": [{ "binding": "AUTH", "id": "..." }]
+  //   secrets: BUN_SHARED_TOKEN
+}

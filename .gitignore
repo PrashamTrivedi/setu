@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# test coverage
+coverage/
+
+# bun
+bun.lockb
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+.dev.vars
+.dev.vars.local
+.dev.vars.*.local
+*.pem
+
+# wrangler / cloudflare
+.wrangler/
+.mf/
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*~
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+bun-debug.log*
+
+# runtime sockets
+*.sock

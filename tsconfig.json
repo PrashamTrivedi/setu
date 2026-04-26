@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/protocol" },
+    { "path": "./packages/worker" },
+    { "path": "./packages/bun-cli" },
+    { "path": "./packages/channels/_runtime" },
+    { "path": "./packages/channels/kanban-work" },
+    { "path": "./packages/channels/kanban-ops" }
+  ]
+}

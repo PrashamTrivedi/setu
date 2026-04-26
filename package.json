@@ -1,0 +1,38 @@
+{
+  "name": "kanban-channels",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Personal-deployment kanban orchestration for long-lived Claude Code sessions, built on Claude Code Channels and Cloudflare Workers.",
+  "type": "module",
+  "workspaces": [
+    "packages/protocol",
+    "packages/worker",
+    "packages/bun-cli",
+    "packages/channels/_runtime",
+    "packages/channels/kanban-work",
+    "packages/channels/kanban-ops"
+  ],
+  "scripts": {
+    "build": "bun run --filter '*' build",
+    "dev": "bun run --filter '@kanban/worker' dev",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "clean": "rm -rf packages/*/dist packages/*/node_modules packages/channels/*/dist packages/channels/*/node_modules node_modules"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "^1.1.14",
+    "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^2.1.8",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  }
+}

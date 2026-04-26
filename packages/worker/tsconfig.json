@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": ["@cloudflare/workers-types"],
+    "lib": ["ES2023"],
+    "jsx": "react-jsx"
+  },
+  "include": ["src/**/*"],
+  "references": [{ "path": "../protocol" }]
+}
