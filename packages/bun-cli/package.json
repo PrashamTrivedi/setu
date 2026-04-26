@@ -5,13 +5,13 @@
   "type": "module",
   "main": "./src/index.ts",
   "bin": {
-    "kanban-bun": "./src/index.ts"
+    "setu": "./src/index.ts"
   },
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun --watch run src/index.ts",
     "build": "bun build src/index.ts --target=bun --outdir dist",
-    "compile": "mkdir -p $HOME/.local/bin && bun build --compile --target=bun src/index.ts --outfile $HOME/.local/bin/kanban-bun",
+    "compile": "mkdir -p $HOME/.local/bin && bun build --compile --target=bun src/index.ts --outfile $HOME/.local/bin/setu",
     "link": "bun link",
     "unlink": "bun unlink",
     "typecheck": "tsc -b --noEmit",

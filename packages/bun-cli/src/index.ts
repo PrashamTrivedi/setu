@@ -1,6 +1,4 @@
 #!/usr/bin/env bun
-import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { ChannelEvent, ChannelToBun, WorkerToBun } from '@kanban/protocol'
 import { BackChannelServer } from './back-channel.ts'
 import { runCli } from './cli.ts'
@@ -27,7 +25,7 @@ if (cliResult.handled) {
 if (!cliResult.runSupervisor) {
   // Defensive: shouldn't happen given current cli.ts, but bail safely.
   cliStore.close()
-  console.error('unknown invocation; run `kanban-bun help`')
+  console.error('unknown invocation; run `setu help`')
   process.exit(2)
 }
 cliStore.close()
@@ -38,11 +36,11 @@ function bootConfig() {
     return loadConfig()
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`[bun-cli] ${msg}`)
+    console.error(`[setu] ${msg}`)
     console.error(
       configPath
-        ? `[bun-cli] config file: ${configPath} — fill in the missing variable there`
-        : '[bun-cli] no config file found. Create ~/.config/kanban-bun/.env (see `kanban-bun help`)',
+        ? `[setu] config file: ${configPath} — fill in the missing variable there`
+        : '[setu] no config file found. Create ~/.config/setu/.env (see `setu help`)',
     )
     process.exit(1)
   }
@@ -50,10 +48,6 @@ function bootConfig() {
 const cfg = bootConfig()
 const store = openStore(cfg.dbPath)
 const registry = new SessionRegistry(cfg)
-
-const here = fileURLToPath(new URL('.', import.meta.url))
-const channelEntry = (role: 'kanban-work' | 'kanban-ops'): string =>
-  resolve(here, '..', '..', 'channels', role, 'src', 'index.ts')
 
 const back = new BackChannelServer(cfg.socketPath, (key, msg) => onChannelMessage(key, msg))
 back.start()
@@ -68,19 +62,19 @@ link.start()
 {
   const u = new URL(cfg.workerWs)
   u.pathname = `/ws/bun/${cfg.machineId}`
-  console.log(`[bun-cli] started — socket=${cfg.socketPath} machine=${cfg.machineId}`)
-  console.log(`[bun-cli] config=${configPath ?? '(none — using shell env)'}`)
-  console.log(`[bun-cli] connecting to ${u.toString()} …`)
+  console.log(`[setu] started — socket=${cfg.socketPath} machine=${cfg.machineId}`)
+  console.log(`[setu] config=${configPath ?? '(none — using shell env)'}`)
+  console.log(`[setu] connecting to ${u.toString()} …`)
 }
 {
   const known = store.listProjects()
   if (known.length === 0) {
     console.warn(
-      '[bun-cli] no projects registered — add one with `kanban-bun project add <id> <path>`',
+      '[setu] no projects registered — add one with `setu project add <id> <path>`',
     )
   } else {
     console.log(
-      `[bun-cli] ${known.length} project(s) registered: ${known.map((p) => p.project_id).join(', ')}`,
+      `[setu] ${known.length} project(s) registered: ${known.map((p) => p.project_id).join(', ')}`,
     )
   }
 }
@@ -97,21 +91,21 @@ async function onWorkerMessage(msg: WorkerToBun): Promise<void> {
       const projectPath = projectPathFor(msg.project_id, store)
       if (!projectPath) {
         console.error(
-          `[bun-cli] unknown project ${msg.project_id} — register with \`kanban-bun project add\``,
+          `[setu] unknown project ${msg.project_id} — register with \`setu project add\``,
         )
         return
       }
       try {
         await ensureWorktree(projectPath, msg.branch, msg.source_branch)
       } catch (err) {
-        console.error('[bun-cli] ensure_worktree failed', err)
+        console.error('[setu] ensure_worktree failed', err)
       }
       return
     }
     case 'spawn_session': {
       const projectPath = projectPathFor(msg.project_id, store)
       if (!projectPath) {
-        console.error(`[bun-cli] cannot spawn — unknown project ${msg.project_id}`)
+        console.error(`[setu] cannot spawn — unknown project ${msg.project_id}`)
         return
       }
       const cwd =
@@ -126,7 +120,6 @@ async function onWorkerMessage(msg: WorkerToBun): Promise<void> {
         role: msg.role,
         cwd,
         initial_event: msg.initial_event,
-        channelServerEntry: channelEntry(msg.role),
       })
       link.send({
         type: 'session_registered',
@@ -176,7 +169,7 @@ function waitAndDeliver(project_id: string, branch: string, event: ChannelEvent)
       return
     }
     if (Date.now() - started > 10_000) {
-      console.error('[bun-cli] timeout waiting for channel hello on', key)
+      console.error('[setu] timeout waiting for channel hello on', key)
       return
     }
     setTimeout(tick, 250)
@@ -188,7 +181,7 @@ function waitAndDeliver(project_id: string, branch: string, event: ChannelEvent)
 function onChannelMessage(key: string, msg: ChannelToBun): void {
   const [project_id, branch] = key.split('::') as [string, string]
   if (!registry.has(project_id, branch)) {
-    console.warn('[bun-cli] dropped message — no session for', key)
+    console.warn('[setu] dropped message — no session for', key)
     return
   }
   switch (msg.type) {
@@ -218,7 +211,7 @@ function onChannelMessage(key: string, msg: ChannelToBun): void {
 
 // ─── shutdown ────────────────────────────────────────────────────────────────
 const shutdown = (sig: string) => {
-  console.log(`[bun-cli] received ${sig}, shutting down`)
+  console.log(`[setu] received ${sig}, shutting down`)
   link.stop()
   back.closeAll('shutdown')
   for (const s of registry.list()) registry.terminate(s.project_id, s.branch)

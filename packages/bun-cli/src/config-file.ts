@@ -3,11 +3,11 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 /**
- * Resolution order for the kanban-bun config file:
+ * Resolution order for the setu config file:
  *   1. $KANBAN_ENV_FILE (explicit override)
- *   2. ./kanban-bun.env (per-project, opt-in)
+ *   2. ./setu.env (per-project, opt-in)
  *   3. ./.env (only if running from packages/bun-cli — preserves repo dev flow)
- *   4. $XDG_CONFIG_HOME/kanban-bun/.env  (default: ~/.config/kanban-bun/.env)
+ *   4. $XDG_CONFIG_HOME/setu/.env  (default: ~/.config/setu/.env)
  *
  * The first one that exists wins. We don't merge — the file is a single
  * source of truth.
@@ -17,14 +17,14 @@ export function resolveConfigPath(): string | null {
 
   if (process.env.KANBAN_ENV_FILE) candidates.push(resolve(process.env.KANBAN_ENV_FILE))
 
-  candidates.push(resolve(process.cwd(), 'kanban-bun.env'))
+  candidates.push(resolve(process.cwd(), 'setu.env'))
 
   const cwdEnv = resolve(process.cwd(), '.env')
   if (process.cwd().endsWith('/packages/bun-cli')) candidates.push(cwdEnv)
 
   const xdg = process.env.XDG_CONFIG_HOME
   const base = xdg && xdg.length > 0 ? xdg : join(homedir(), '.config')
-  candidates.push(join(base, 'kanban-bun', '.env'))
+  candidates.push(join(base, 'setu', '.env'))
 
   for (const path of candidates) {
     if (existsSync(path)) return path
@@ -35,7 +35,7 @@ export function resolveConfigPath(): string | null {
 export function defaultConfigPath(): string {
   const xdg = process.env.XDG_CONFIG_HOME
   const base = xdg && xdg.length > 0 ? xdg : join(homedir(), '.config')
-  return join(base, 'kanban-bun', '.env')
+  return join(base, 'setu', '.env')
 }
 
 /** Minimal `.env` parser. Mutates process.env, never overwriting existing keys. */

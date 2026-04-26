@@ -22,7 +22,7 @@
     "setup:vars": "bun run setup:vars:worker && bun run setup:vars:bun",
     "setup:vars:worker": "test -f packages/worker/.dev.vars || cp packages/worker/.dev.vars.example packages/worker/.dev.vars",
     "setup:vars:bun": "test -f packages/bun-cli/.env || cp packages/bun-cli/.env.example packages/bun-cli/.env",
-    "setup:config:bun": "mkdir -p \"${XDG_CONFIG_HOME:-$HOME/.config}/kanban-bun\" && (test -f \"${XDG_CONFIG_HOME:-$HOME/.config}/kanban-bun/.env\" || cp packages/bun-cli/.env.example \"${XDG_CONFIG_HOME:-$HOME/.config}/kanban-bun/.env\") && echo \"global config: ${XDG_CONFIG_HOME:-$HOME/.config}/kanban-bun/.env\"",
+    "setup:config:bun": "mkdir -p \"${XDG_CONFIG_HOME:-$HOME/.config}/setu\" && (test -f \"${XDG_CONFIG_HOME:-$HOME/.config}/setu/.env\" || cp packages/bun-cli/.env.example \"${XDG_CONFIG_HOME:-$HOME/.config}/setu/.env\") && echo \"global config: ${XDG_CONFIG_HOME:-$HOME/.config}/setu/.env\"",
     "install:cli": "bun run --filter @kanban/bun-cli link",
     "uninstall:cli": "bun run --filter @kanban/bun-cli unlink",
     "compile:cli": "bun run --filter @kanban/bun-cli compile",

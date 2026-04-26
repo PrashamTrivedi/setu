@@ -79,11 +79,11 @@ openssl rand -hex 32
 Register your project on the Bun side (one-time, persisted in SQLite):
 
 ```bash
-kanban-bun project add demo /abs/path/to/your/repo
+setu project add demo /abs/path/to/your/repo
 ```
 
-(`setup:local` already ran `bun link` to put `kanban-bun` on your PATH.
-If you skipped it, see [Installing the kanban-bun CLI system-wide](#installing-the-kanban-bun-cli-system-wide).)
+(`setup:local` already ran `bun link` to put `setu` on your PATH.
+If you skipped it, see [Installing the setu CLI system-wide](#installing-the-setu-cli-system-wide).)
 
 ## Local development (wrangler dev on :9494)
 
@@ -104,10 +104,10 @@ Or one terminal with both processes:
 bun run dev:all
 ```
 
-Or once `kanban-bun` is on PATH and `~/.config/kanban-bun/.env` is configured:
+Or once `setu` is on PATH and `~/.config/setu/.env` is configured:
 
 ```bash
-kanban-bun supervisor
+setu supervisor
 ```
 
 Then open `http://127.0.0.1:9494/?project=demo`, create a card, click
@@ -122,12 +122,12 @@ survive across dev restarts.
 Project metadata (`display_name`, `default_branch`, `repo_policy`) lives in
 the Worker's Durable Object (SQLite-backed). The Bun supervisor keeps the
 machine-local `project_path` in its own SQLite store at
-`$XDG_DATA_HOME/kanban-bun/state.db` (override with `KANBAN_DB_PATH`). Both
+`$XDG_DATA_HOME/setu/state.db` (override with `KANBAN_DB_PATH`). Both
 sides share a single DDL defined in `@kanban/protocol/schema.ts` — the
 `projects` table has identical shape on both stores; only `project_path` is
 populated on the Bun side.
 
-### Installing the `kanban-bun` CLI system-wide
+### Installing the `setu` CLI system-wide
 
 Pick whichever fits:
 
@@ -137,7 +137,7 @@ into Bun's global bin; source edits picked up live.
 ```bash
 bun run install:cli
 # under the hood: bun run --filter @kanban/bun-cli link
-# → registers `kanban-bun` on your PATH
+# → registers `setu` on your PATH
 ```
 
 `bun run setup:local` runs this automatically. To remove later: `bun run uninstall:cli`.
@@ -147,49 +147,49 @@ a single ~50MB executable in `~/.local/bin/`:
 
 ```bash
 bun run compile:cli
-# → ~/.local/bin/kanban-bun
+# → ~/.local/bin/setu
 ```
 
-### Where `kanban-bun` looks for config
+### Where `setu` looks for config
 
 The supervisor needs `KANBAN_WORKER_WS` and `KANBAN_BEARER_TOKEN`. The CLI
 auto-loads them from the first `.env` it finds, in this order:
 
 1. `$KANBAN_ENV_FILE` (explicit override)
-2. `./kanban-bun.env` in the current directory
+2. `./setu.env` in the current directory
 3. `./.env` — only if you're inside `packages/bun-cli/` (preserves repo dev flow)
-4. `$XDG_CONFIG_HOME/kanban-bun/.env` (default: `~/.config/kanban-bun/.env`)
+4. `$XDG_CONFIG_HOME/setu/.env` (default: `~/.config/setu/.env`)
 
 `bun run setup:local` seeds option 4 from the example file. You can also
 seed it explicitly later:
 
 ```bash
 bun run setup:config:bun
-# → ~/.config/kanban-bun/.env (if it doesn't already exist)
+# → ~/.config/setu/.env (if it doesn't already exist)
 ```
 
 Check what got resolved:
 
 ```bash
-kanban-bun config path
+setu config path
 ```
 
-Bare `kanban-bun` (no args) prints help. Use `kanban-bun supervisor` to
+Bare `setu` (no args) prints help. Use `setu supervisor` to
 explicitly start the long-lived process.
 
 ### Managing projects
 
-Once `kanban-bun` is on PATH, from anywhere:
+Once `setu` is on PATH, from anywhere:
 
 ```bash
-kanban-bun project add demo /home/me/code/demo
-kanban-bun project add sun /home/me/code/sunbloom --name "Sunbloom" --default-branch main
+setu project add demo /home/me/code/demo
+setu project add sun /home/me/code/sunbloom --name "Sunbloom" --default-branch main
 
 # list (id, repo_policy, default_branch, path)
-kanban-bun project list
+setu project list
 
 # remove
-kanban-bun project rm demo
+setu project rm demo
 ```
 
 When the supervisor boots, it logs the registered projects and refuses to
@@ -198,9 +198,9 @@ event, so changes apply without restarting the supervisor.
 
 ## Scripts (root)
 
-- `bun run setup:local` — install deps, copy `.env`/`.dev.vars`, link `kanban-bun` globally
+- `bun run setup:local` — install deps, copy `.env`/`.dev.vars`, link `setu` globally
 - `bun run install:cli` / `uninstall:cli` — `bun link`/`unlink` for the CLI
-- `bun run compile:cli` — build a standalone `~/.local/bin/kanban-bun` binary
+- `bun run compile:cli` — build a standalone `~/.local/bin/setu` binary
 - `bun run dev:worker` — wrangler dev on :9494 (worker only)
 - `bun run dev:bun` — Bun supervisor (watch mode)
 - `bun run dev:all` — both, side-by-side via concurrently

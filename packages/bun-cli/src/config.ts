@@ -14,8 +14,8 @@ export interface BunConfig {
 
 function defaultSocketPath(): string {
   const xdg = process.env.XDG_RUNTIME_DIR
-  if (xdg && existsSync(xdg)) return join(xdg, 'kanban-bun.sock')
-  return join(tmpdir(), `kanban-bun-${process.getuid?.() ?? 'user'}.sock`)
+  if (xdg && existsSync(xdg)) return join(xdg, 'setu.sock')
+  return join(tmpdir(), `setu-${process.getuid?.() ?? 'user'}.sock`)
 }
 
 export function loadConfig(): BunConfig {

@@ -133,7 +133,7 @@ export const indexHtml = /* html */ `<!doctype html>
     $picker.innerHTML = ''
     if (projects.length === 0) {
       const opt = document.createElement('option'); opt.textContent = '(no projects)'; opt.disabled = true; $picker.appendChild(opt)
-      renderEmpty('No projects registered yet. Run <code>kanban-bun project add &lt;id&gt; &lt;path&gt;</code> on a connected supervisor, then reload.')
+      renderEmpty('No projects registered yet. Run <code>setu project add &lt;id&gt; &lt;path&gt;</code> on a connected supervisor, then reload.')
       $status.textContent = ''
       return
     }

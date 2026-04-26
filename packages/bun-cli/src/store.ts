@@ -80,7 +80,7 @@ export class LocalStore {
 export function defaultDbPath(): string {
   const xdg = process.env.XDG_DATA_HOME
   const base = xdg && xdg.length > 0 ? xdg : join(homedir(), '.local', 'share')
-  return join(base, 'kanban-bun', 'state.db')
+  return join(base, 'setu', 'state.db')
 }
 
 export function openStore(path?: string): LocalStore {

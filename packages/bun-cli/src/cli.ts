@@ -1,20 +1,28 @@
+import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import type { LocalStore } from './store.ts'
 
-const HELP = `kanban-bun — Bun supervisor for kanban-channels
+const HELP = `setu — Bun supervisor for kanban-channels
 
 USAGE
-  kanban-bun                       show this help
-  kanban-bun supervisor            run the long-lived supervisor (requires env)
-  kanban-bun project add <id> <path> [--name <s>] [--default-branch <s>] [--repo-policy own|client]
-  kanban-bun project list
-  kanban-bun project rm <id>
-  kanban-bun config path           print the resolved config file path
-  kanban-bun help
+  setu                              show this help
+  setu supervisor                   run the long-lived supervisor (requires env)
+  setu uninstall                    drop any prior user-scope channel MCP entries (cleanup)
+  setu project add <id> <path> [--name <s>] [--default-branch <s>] [--repo-policy own|client]
+  setu project list
+  setu project rm <id>
+  setu config path                  print the resolved config file path
+  setu help
+
+NOTE
+  The channel MCP servers (kanban-work, kanban-ops) are NOT user-scope. Setu
+  writes a per-session --mcp-config when it spawns each Claude process; that
+  config is the only place these servers are registered. If you previously
+  ran an older \`setu install\`, run \`setu uninstall\` once to clean up.
 
 CONFIG / ENVIRONMENT
   Config file (auto-loaded for supervisor):
-    \$XDG_CONFIG_HOME/kanban-bun/.env   (default: ~/.config/kanban-bun/.env)
+    \$XDG_CONFIG_HOME/setu/.env   (default: ~/.config/setu/.env)
     or ./.env in the current working directory
 
   Required for supervisor mode:
@@ -24,9 +32,9 @@ CONFIG / ENVIRONMENT
   Optional:
     KANBAN_MACHINE_ID      free-form identifier for this machine (default: hostname)
     KANBAN_DB_PATH         local SQLite store path
-                           (default: \$XDG_DATA_HOME/kanban-bun/state.db)
+                           (default: \$XDG_DATA_HOME/setu/state.db)
     KANBAN_SOCKET_PATH     back-channel UDS path
-                           (default: \$XDG_RUNTIME_DIR/kanban-bun.sock)
+                           (default: \$XDG_RUNTIME_DIR/setu.sock)
     CLAUDE_BIN             path to Claude Code binary (default: claude)
 `
 
@@ -65,6 +73,29 @@ export interface CliResult {
   runSupervisor?: boolean
 }
 
+const CHANNEL_ROLES = ['kanban-work', 'kanban-ops'] as const
+
+function claudeBin(): string {
+  return process.env.CLAUDE_BIN ?? 'claude'
+}
+
+function runClaudeMcp(args: string[]): { code: number; stderr: string; stdout: string } {
+  const r = spawnSync(claudeBin(), args, { encoding: 'utf8' })
+  return {
+    code: r.status ?? 1,
+    stderr: r.stderr ?? '',
+    stdout: r.stdout ?? '',
+  }
+}
+
+function uninstallMcpServers(log: (msg: string) => void): number {
+  for (const role of CHANNEL_ROLES) {
+    const r = runClaudeMcp(['mcp', 'remove', role, '-s', 'user'])
+    log(r.code === 0 ? `✓ removed ${role}` : `– ${role}: not registered`)
+  }
+  return 0
+}
+
 export function runCli(
   argv: string[],
   store: LocalStore,
@@ -88,12 +119,16 @@ export function runCli(
     return { handled: false, exitCode: 0, runSupervisor: true }
   }
 
+  if (cmd === 'uninstall') {
+    return { handled: true, exitCode: uninstallMcpServers(log) }
+  }
+
   if (cmd === 'config') {
     if (sub === 'path') {
       log(resolvedConfigPath ?? '(no config file resolved)')
       return { handled: true, exitCode: 0 }
     }
-    log('usage: kanban-bun config path')
+    log('usage: setu config path')
     return { handled: true, exitCode: 2 }
   }
 
@@ -109,7 +144,7 @@ export function runCli(
     case 'add': {
       const [id, path] = positional
       if (!id || !path) {
-        log('usage: kanban-bun project add <id> <path>')
+        log('usage: setu project add <id> <path>')
         return { handled: true, exitCode: 2 }
       }
       const row = store.addProject({
@@ -125,7 +160,7 @@ export function runCli(
     case 'list': {
       const rows = store.listProjects()
       if (rows.length === 0) {
-        log('(no projects — add one with `kanban-bun project add <id> <path>`)')
+        log('(no projects — add one with `setu project add <id> <path>`)')
       } else {
         for (const r of rows) {
           log(`${r.project_id}\t${r.repo_policy}\t${r.default_branch}\t${r.project_path ?? '-'}`)
@@ -136,7 +171,7 @@ export function runCli(
     case 'rm': {
       const [id] = positional
       if (!id) {
-        log('usage: kanban-bun project rm <id>')
+        log('usage: setu project rm <id>')
         return { handled: true, exitCode: 2 }
       }
       const ok = store.removeProject(id)

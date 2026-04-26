@@ -158,7 +158,7 @@ Standard MCP channel surface as defined by [channels-reference](https://code.cla
 
 ### 6.4 Channel server ↔ Bun (back-channel)
 
-The channel server's stdio belongs to Claude, so it cannot speak to Bun on stdio. Bun exposes a Unix domain socket at a well-known path (`$XDG_RUNTIME_DIR/kanban-bun.sock`); each spawned channel server connects on startup and identifies itself with the `(project_id, branch, role)` it was spawned for. All inbound events and outbound `reply_tool_call` / `permission_request` messages flow over this socket. The socket is single-machine, single-user; no auth needed beyond filesystem permissions on the socket path.
+The channel server's stdio belongs to Claude, so it cannot speak to Bun on stdio. Bun exposes a Unix domain socket at a well-known path (`$XDG_RUNTIME_DIR/setu.sock`); each spawned channel server connects on startup and identifies itself with the `(project_id, branch, role)` it was spawned for. All inbound events and outbound `reply_tool_call` / `permission_request` messages flow over this socket. The socket is single-machine, single-user; no auth needed beyond filesystem permissions on the socket path.
 
 ### 6.5 UI ↔ Worker
 
