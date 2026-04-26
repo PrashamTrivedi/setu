@@ -49,7 +49,8 @@ export interface Card {
 export interface Project {
   project_id: string
   display_name: string
-  project_path: string
+  /** Machine-local path on the Bun supervisor side. Worker stores this NULL. */
+  project_path?: string | null
   default_branch: string
   repo_policy: RepoPolicy
 }

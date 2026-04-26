@@ -1,3 +1,5 @@
 # Bearer token shared with the Bun supervisor. Generate with:
 #   openssl rand -hex 32
+# After copying to .dev.vars, paste the SAME value into
+# packages/bun-cli/.env as KANBAN_BEARER_TOKEN.
 BUN_SHARED_TOKEN=replace-me-with-32-bytes-hex

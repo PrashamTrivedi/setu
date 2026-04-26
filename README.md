@@ -59,43 +59,69 @@ Put the value in:
 
 ## Setup
 
-```bash
-bun install
-
-# Worker — copy example then fill in your token
-cp packages/worker/.dev.vars.example packages/worker/.dev.vars
-
-# Bun supervisor — copy example then fill in worker URL, token, project paths
-cp packages/bun-cli/.env.example packages/bun-cli/.env
-```
-
-## Local development
-
-Run the worker in one terminal:
+One command copies both example files (won't overwrite existing):
 
 ```bash
-bun run dev
-# wrangler dev — UI at http://localhost:8787
+bun run setup:local
 ```
 
-Run the Bun supervisor in another terminal (after editing `.env`):
+Then edit:
+
+- `packages/worker/.dev.vars` — paste a freshly generated bearer token
+- `packages/bun-cli/.env` — paste the **same** token, set `KANBAN_PROJECTS=demo=/abs/path/to/your/repo`
+
+Generate the token with:
 
 ```bash
-cd packages/bun-cli
-bun run start
+openssl rand -hex 32
 ```
 
-Open `http://localhost:8787/?project=<your-project-id>` and create a card.
-Click "spawn worker for branch" to launch a Claude session against the
-configured project path.
+## Local development (wrangler dev on :9494)
+
+Two terminals:
+
+```bash
+# terminal 1 — Cloudflare Worker (UI + API + DO)
+bun run dev:worker
+# → http://127.0.0.1:9494
+
+# terminal 2 — Bun supervisor
+bun run dev:bun
+```
+
+Or one terminal with both processes:
+
+```bash
+bun run dev:all
+```
+
+Then open `http://127.0.0.1:9494/?project=demo`, create a card, click
+"spawn worker for branch". The supervisor's stdout will print
+`[bun-cli] connecting to ws://localhost:9494/...`.
+
+`wrangler dev` persists DO state to `.wrangler/state` by default, so cards
+survive across dev restarts.
+
+## Project storage
+
+Project metadata (`display_name`, `default_branch`, `repo_policy`) lives in
+the Worker's Durable Object (SQLite-backed). The Bun supervisor keeps the
+machine-local `project_path` in its own store. Both sides share a single DDL
+defined in `@kanban/protocol/schema.ts` — the `projects` table has identical
+shape on both stores; only `project_path` is populated on the Bun side.
+
+In v1 the Bun side reads `KANBAN_PROJECTS` from `.env`. The follow-up
+refactor moves this to a local SQLite store managed via
+`kanban-bun project add|list|rm` and removes the env var.
 
 ## Scripts (root)
 
-- `bun run dev` — wrangler dev (worker)
-- `bun run typecheck` — TS project-references build (no emit)
-- `bun run test` — vitest (no watch)
-- `bun run test:watch` — vitest watch
-- `bun run test:coverage` — vitest with coverage report
+- `bun run setup:local` — install deps + copy both `.env`/`.dev.vars` examples
+- `bun run dev:worker` — wrangler dev on :9494 (worker only)
+- `bun run dev:bun` — Bun supervisor (watch mode)
+- `bun run dev:all` — both, side-by-side via concurrently
+- `bun run typecheck` — `tsc -b` across all project references
+- `bun run test` / `test:watch` / `test:coverage` — vitest
 - `bun run lint` / `bun run lint:fix` — biome
 - `bun run build` — build all packages
 

@@ -15,6 +15,13 @@
   "scripts": {
     "build": "bun run --filter '*' build",
     "dev": "bun run --filter '@kanban/worker' dev",
+    "dev:worker": "bun run --filter '@kanban/worker' dev",
+    "dev:bun": "bun run --filter '@kanban/bun-cli' dev",
+    "dev:all": "bun --bun concurrently -n worker,bun -c blue,green 'bun run dev:worker' 'bun run dev:bun'",
+    "setup:local": "bun install && bun run setup:vars",
+    "setup:vars": "bun run setup:vars:worker && bun run setup:vars:bun",
+    "setup:vars:worker": "test -f packages/worker/.dev.vars || cp packages/worker/.dev.vars.example packages/worker/.dev.vars",
+    "setup:vars:bun": "test -f packages/bun-cli/.env || cp packages/bun-cli/.env.example packages/bun-cli/.env",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -29,6 +36,7 @@
     "@types/bun": "^1.1.14",
     "@types/node": "^22.10.2",
     "@vitest/coverage-v8": "^2.1.8",
+    "concurrently": "^9.1.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },

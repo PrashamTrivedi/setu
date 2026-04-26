@@ -23,6 +23,10 @@
   ],
   "vars": {
     "ALLOWED_PROJECTS": "demo"
+  },
+  "dev": {
+    "port": 9494,
+    "ip": "127.0.0.1"
   }
   // Add when paired with a real machine:
   //   "kv_namespaces": [{ "binding": "AUTH", "id": "..." }]
