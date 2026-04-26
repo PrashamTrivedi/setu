@@ -79,9 +79,11 @@ openssl rand -hex 32
 Register your project on the Bun side (one-time, persisted in SQLite):
 
 ```bash
-cd packages/bun-cli
-bun run start project add demo /abs/path/to/your/repo
+kanban-bun project add demo /abs/path/to/your/repo
 ```
+
+(`setup:local` already ran `bun link` to put `kanban-bun` on your PATH.
+If you skipped it, see [Installing the kanban-bun CLI system-wide](#installing-the-kanban-bun-cli-system-wide).)
 
 ## Local development (wrangler dev on :9494)
 
@@ -119,33 +121,58 @@ sides share a single DDL defined in `@kanban/protocol/schema.ts` — the
 `projects` table has identical shape on both stores; only `project_path` is
 populated on the Bun side.
 
-Manage the local project list with the `kanban-bun` CLI:
+### Installing the `kanban-bun` CLI system-wide
+
+Pick whichever fits:
+
+**Option A — `bun link` (recommended for the dev box).** Symlinks the entry
+into Bun's global bin; source edits picked up live.
 
 ```bash
-cd packages/bun-cli
+bun run install:cli
+# under the hood: bun run --filter @kanban/bun-cli link
+# → registers `kanban-bun` on your PATH
+```
 
-# add
-bun run start project add demo /home/me/code/demo
-bun run start project add sun /home/me/code/sunbloom --name "Sunbloom" --default-branch main
+`bun run setup:local` runs this automatically. To remove later: `bun run uninstall:cli`.
+
+**Option B — compiled standalone binary (for an always-on host).** Produces
+a single ~50MB executable in `~/.local/bin/`:
+
+```bash
+bun run compile:cli
+# → ~/.local/bin/kanban-bun
+```
+
+### Managing projects
+
+Once `kanban-bun` is on PATH, from anywhere:
+
+```bash
+kanban-bun project add demo /home/me/code/demo
+kanban-bun project add sun /home/me/code/sunbloom --name "Sunbloom" --default-branch main
 
 # list (id, repo_policy, default_branch, path)
-bun run start project list
+kanban-bun project list
 
 # remove
-bun run start project rm demo
+kanban-bun project rm demo
 ```
 
 When the supervisor boots, it logs the registered projects and refuses to
-spawn for any `project_id` it doesn't know about.
+spawn for any `project_id` it doesn't know about. The store is read on every
+event, so changes apply without restarting the supervisor.
 
 ## Scripts (root)
 
-- `bun run setup:local` — install deps + copy both `.env`/`.dev.vars` examples
+- `bun run setup:local` — install deps, copy `.env`/`.dev.vars`, link `kanban-bun` globally
+- `bun run install:cli` / `uninstall:cli` — `bun link`/`unlink` for the CLI
+- `bun run compile:cli` — build a standalone `~/.local/bin/kanban-bun` binary
 - `bun run dev:worker` — wrangler dev on :9494 (worker only)
 - `bun run dev:bun` — Bun supervisor (watch mode)
 - `bun run dev:all` — both, side-by-side via concurrently
 - `bun run typecheck` — `tsc -b` across all project references
-- `bun run test` / `test:watch` / `test:coverage` — vitest
+- `bun run test` (vitest + bun test) / `test:vitest` / `test:bun` / `test:watch` / `test:coverage`
 - `bun run lint` / `bun run lint:fix` — biome
 - `bun run build` — build all packages
 
