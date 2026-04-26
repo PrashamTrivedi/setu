@@ -64,10 +64,28 @@ describe('runCli', () => {
     expect(out.some((l) => l.includes('not found: demo'))).toBe(true)
   })
 
-  it('returns handled:false for unknown commands so supervisor can run', () => {
+  it('bare invocation prints help and exits cleanly', () => {
     const store = newStore()
-    expect(runCli([], store, () => {})).toEqual({ handled: false, exitCode: 0 })
-    expect(runCli(['nonsense'], store, () => {})).toEqual({ handled: false, exitCode: 0 })
+    const out: string[] = []
+    expect(runCli([], store, (m) => out.push(m))).toEqual({ handled: true, exitCode: 0 })
+    expect(out[0]).toContain('USAGE')
+  })
+
+  it('explicit supervisor command signals the caller to boot the supervisor', () => {
+    const store = newStore()
+    const r = runCli(['supervisor'], store, () => {})
+    expect(r.handled).toBe(false)
+    expect(r.runSupervisor).toBe(true)
+  })
+
+  it('rejects unknown top-level commands with a non-zero exit', () => {
+    const store = newStore()
+    const out: string[] = []
+    expect(runCli(['nonsense'], store, (m) => out.push(m))).toEqual({
+      handled: true,
+      exitCode: 2,
+    })
+    expect(out.join('\n')).toContain('unknown command')
   })
 
   it('rejects malformed add invocations', () => {

@@ -4,28 +4,50 @@ import { fileURLToPath } from 'node:url'
 import type { ChannelEvent, ChannelToBun, WorkerToBun } from '@kanban/protocol'
 import { BackChannelServer } from './back-channel.ts'
 import { runCli } from './cli.ts'
+import { loadEnvFile, resolveConfigPath } from './config-file.ts'
 import { loadConfig } from './config.ts'
 import { SessionRegistry, sessionKey } from './sessions.ts'
 import { type LocalStore, openStore } from './store.ts'
 import { WorkerLink } from './worker-link.ts'
 import { ensureWorktree } from './worktree.ts'
 
+// Auto-load .env from the canonical config location *before* anything reads
+// process.env. Existing shell vars take precedence (loadEnvFile is no-overwrite).
+const configPath = resolveConfigPath()
+if (configPath) loadEnvFile(configPath)
+
 // ─── CLI dispatch ────────────────────────────────────────────────────────────
-// `kanban-bun project add|list|rm` → run CLI and exit. Anything else (or
-// no argv) → run the supervisor.
 const argv = process.argv.slice(2)
 const cliStore = openStore()
-const cliResult = runCli(argv, cliStore)
+const cliResult = runCli(argv, cliStore, console.log, configPath ?? undefined)
 if (cliResult.handled) {
   cliStore.close()
   process.exit(cliResult.exitCode)
 }
-// CLI did not handle this invocation — drop the temporary handle and continue
-// into supervisor mode (which opens its own long-lived store).
+if (!cliResult.runSupervisor) {
+  // Defensive: shouldn't happen given current cli.ts, but bail safely.
+  cliStore.close()
+  console.error('unknown invocation; run `kanban-bun help`')
+  process.exit(2)
+}
 cliStore.close()
 
 // ─── Supervisor ──────────────────────────────────────────────────────────────
-const cfg = loadConfig()
+function bootConfig() {
+  try {
+    return loadConfig()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[bun-cli] ${msg}`)
+    console.error(
+      configPath
+        ? `[bun-cli] config file: ${configPath} — fill in the missing variable there`
+        : '[bun-cli] no config file found. Create ~/.config/kanban-bun/.env (see `kanban-bun help`)',
+    )
+    process.exit(1)
+  }
+}
+const cfg = bootConfig()
 const store = openStore(cfg.dbPath)
 const registry = new SessionRegistry(cfg)
 
@@ -44,6 +66,7 @@ link.setProjectsAvailableProvider(() => store.listProjects().map((p) => p.projec
 link.start()
 
 console.log(`[bun-cli] started — socket=${cfg.socketPath} machine=${cfg.machineId}`)
+console.log(`[bun-cli] config=${configPath ?? '(none — using shell env)'}`)
 console.log(`[bun-cli] connecting to ${cfg.workerWs} …`)
 {
   const known = store.listProjects()

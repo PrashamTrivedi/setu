@@ -94,7 +94,7 @@ Two terminals:
 bun run dev:worker
 # → http://127.0.0.1:9494
 
-# terminal 2 — Bun supervisor
+# terminal 2 — Bun supervisor (uses packages/bun-cli/.env)
 bun run dev:bun
 ```
 
@@ -102,6 +102,12 @@ Or one terminal with both processes:
 
 ```bash
 bun run dev:all
+```
+
+Or once `kanban-bun` is on PATH and `~/.config/kanban-bun/.env` is configured:
+
+```bash
+kanban-bun supervisor
 ```
 
 Then open `http://127.0.0.1:9494/?project=demo`, create a card, click
@@ -143,6 +149,33 @@ a single ~50MB executable in `~/.local/bin/`:
 bun run compile:cli
 # → ~/.local/bin/kanban-bun
 ```
+
+### Where `kanban-bun` looks for config
+
+The supervisor needs `KANBAN_WORKER_WS` and `KANBAN_BEARER_TOKEN`. The CLI
+auto-loads them from the first `.env` it finds, in this order:
+
+1. `$KANBAN_ENV_FILE` (explicit override)
+2. `./kanban-bun.env` in the current directory
+3. `./.env` — only if you're inside `packages/bun-cli/` (preserves repo dev flow)
+4. `$XDG_CONFIG_HOME/kanban-bun/.env` (default: `~/.config/kanban-bun/.env`)
+
+`bun run setup:local` seeds option 4 from the example file. You can also
+seed it explicitly later:
+
+```bash
+bun run setup:config:bun
+# → ~/.config/kanban-bun/.env (if it doesn't already exist)
+```
+
+Check what got resolved:
+
+```bash
+kanban-bun config path
+```
+
+Bare `kanban-bun` (no args) prints help. Use `kanban-bun supervisor` to
+explicitly start the long-lived process.
 
 ### Managing projects
 
