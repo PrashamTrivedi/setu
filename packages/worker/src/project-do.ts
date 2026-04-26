@@ -1,30 +1,22 @@
 /// <reference types="@cloudflare/workers-types" />
 import type { BunToWorker, Card, CardStatus, ChannelEvent, WorkerToBun } from '@kanban/protocol'
-import { PROTOCOL_VERSION, canTransition } from '@kanban/protocol'
+import { canTransition } from '@kanban/protocol'
 import type { Env } from './types.ts'
 
-interface BunConn {
-  ws: WebSocket
-  machine_id: string | null
-  authed: boolean
-}
-
-interface UiSubscriber {
-  ws: WebSocket
-}
-
 /**
- * One DO instance per project_id. Holds the kanban brain for the project:
- * card list, per-(project_id, branch) drain queue, session liveness, and
- * the WS to whichever Bun supervisor is currently paired.
+ * One DO instance per `project_id` (plus a singleton at name `__registry__`).
+ *
+ * The DO no longer holds a WS to Bun directly. Instead it tracks which
+ * `machine_id` claims this project, then forwards outbound messages to the
+ * corresponding MachineDO via DO-to-DO RPC. Inbound messages from Bun arrive
+ * at MachineDO and get fanned out to the right ProjectDO via /_inbound.
+ *
+ * The singleton `__registry__` instance holds the machine→projects index that
+ * the UI uses to enumerate known projects without listing DOs.
  */
 export class ProjectDO implements DurableObject {
   private state: DurableObjectState
   private env: Env
-  private bun: BunConn | null = null
-  private uiSubs = new Set<UiSubscriber>()
-  // (project_id, branch) -> live session role
-  private liveSessions = new Map<string, 'kanban-work' | 'kanban-ops'>()
   // dedupe inbound reply_tool_call by tool_call_id (replay-safe)
   private seenToolCalls = new Set<string>()
 
@@ -37,11 +29,28 @@ export class ProjectDO implements DurableObject {
     const url = new URL(req.url)
     const path = url.pathname
 
-    // ─── WS endpoints ────────────────────────────────────────────────────
-    if (path === '/__ws/bun') return this.acceptBunWs(req)
-    if (path === '/__ws/ui') return this.acceptUiWs(req)
+    // ─── Registry singleton ──────────────────────────────────────────────
+    if (path.startsWith('/_registry/')) return this.handleRegistry(req, path)
 
-    // ─── REST endpoints (DO-internal) ────────────────────────────────────
+    // ─── Internal RPC from MachineDO ─────────────────────────────────────
+    if (req.method === 'POST' && path === '/_pair') {
+      const { machine_id } = (await req.json()) as { machine_id: string }
+      await this.state.storage.put('machine_id', machine_id)
+      return Response.json({ ok: true })
+    }
+    if (req.method === 'POST' && path === '/_unpair') {
+      const { machine_id } = (await req.json()) as { machine_id: string }
+      const current = await this.state.storage.get<string>('machine_id')
+      if (current === machine_id) await this.state.storage.delete('machine_id')
+      return Response.json({ ok: true })
+    }
+    if (req.method === 'POST' && path === '/_inbound') {
+      const msg = (await req.json()) as BunToWorker
+      await this.onInboundFromMachine(msg)
+      return Response.json({ ok: true })
+    }
+
+    // ─── Public REST (called via worker proxy) ───────────────────────────
     if (req.method === 'GET' && path === '/cards') {
       return Response.json(await this.listCards())
     }
@@ -49,6 +58,10 @@ export class ProjectDO implements DurableObject {
       const body = (await req.json()) as Partial<Card> & { project_id: string }
       const card = await this.createCard(body)
       return Response.json(card, { status: 201 })
+    }
+    if (req.method === 'GET' && path === '/status') {
+      const machine_id = (await this.state.storage.get<string>('machine_id')) ?? null
+      return Response.json({ paired: !!machine_id, machine_id })
     }
     if (req.method === 'POST') {
       const m = path.match(/^\/cards\/([^/]+)\/(approve|spawn|input)$/)
@@ -67,6 +80,39 @@ export class ProjectDO implements DurableObject {
     return new Response('not found', { status: 404 })
   }
 
+  // ─── Registry singleton (only meaningful at name '__registry__') ──────
+  private async handleRegistry(req: Request, path: string): Promise<Response> {
+    if (req.method === 'POST' && path === '/_registry/upsert') {
+      const body = (await req.json()) as { machine_id: string; projects: string[] }
+      await this.state.storage.put(`machine:${body.machine_id}`, {
+        machine_id: body.machine_id,
+        projects: body.projects,
+        connected_at: Date.now(),
+      })
+      return Response.json({ ok: true })
+    }
+    if (req.method === 'POST' && path === '/_registry/down') {
+      const body = (await req.json()) as { machine_id: string }
+      await this.state.storage.delete(`machine:${body.machine_id}`)
+      return Response.json({ ok: true })
+    }
+    if (req.method === 'GET' && path === '/_registry/list') {
+      const all = (await this.state.storage.list<{
+        machine_id: string
+        projects: string[]
+        connected_at: number
+      }>({ prefix: 'machine:' })) as Map<
+        string,
+        { machine_id: string; projects: string[]; connected_at: number }
+      >
+      const machines = [...all.values()]
+      const projectSet = new Set<string>()
+      for (const m of machines) for (const p of m.projects) projectSet.add(p)
+      return Response.json({ machines, projects: [...projectSet].sort() })
+    }
+    return new Response('not found', { status: 404 })
+  }
+
   // ─── persistence helpers ───────────────────────────────────────────────
   private async listCards(): Promise<Card[]> {
     const m = (await this.state.storage.list<Card>({ prefix: 'card:' })) as Map<string, Card>
@@ -80,7 +126,6 @@ export class ProjectDO implements DurableObject {
   private async putCard(card: Card): Promise<void> {
     card.updated_at = Date.now()
     await this.state.storage.put(`card:${card.id}`, card)
-    this.notifyUi()
   }
 
   // ─── card lifecycle ────────────────────────────────────────────────────
@@ -101,7 +146,6 @@ export class ProjectDO implements DurableObject {
       repo_policy: input.repo_policy ?? 'own',
     }
     await this.putCard(card)
-    // v1: do not auto-spawn. User clicks "spawn worker" in UI.
     return card
   }
 
@@ -113,18 +157,17 @@ export class ProjectDO implements DurableObject {
     }
     card.status = 'approved'
     await this.putCard(card)
-    // queue ops Claude on next tick — spawn via paired Bun
     await this.requestOpsSpawn(card)
     return card
   }
 
-  /** User clicked "spawn worker for branch" — kick the bun supervisor. */
   private async spawnForCard(id: string): Promise<Card | { error: string }> {
     const card = await this.getCard(id)
     if (!card) return { error: 'not_found' }
-    if (!this.bun) return { error: 'no_bun_paired' }
+    const machine_id = await this.state.storage.get<string>('machine_id')
+    if (!machine_id) return { error: 'no_machine_paired_for_this_project' }
 
-    this.send({
+    await this.sendToMachine(machine_id, {
       type: 'ensure_worktree',
       project_id: card.project_id,
       branch: card.target_branch,
@@ -141,7 +184,7 @@ export class ProjectDO implements DurableObject {
       },
     }
 
-    this.send({
+    await this.sendToMachine(machine_id, {
       type: 'spawn_session',
       project_id: card.project_id,
       project_path: '__bun_resolves__',
@@ -160,8 +203,9 @@ export class ProjectDO implements DurableObject {
     if (!card) return { error: 'not_found' }
     card.pending_input = null
     await this.putCard(card)
-    if (!this.bun) return { error: 'no_bun_paired' }
-    this.send({
+    const machine_id = await this.state.storage.get<string>('machine_id')
+    if (!machine_id) return { error: 'no_machine_paired_for_this_project' }
+    await this.sendToMachine(machine_id, {
       type: 'push_event',
       project_id: card.project_id,
       branch: card.target_branch,
@@ -180,7 +224,8 @@ export class ProjectDO implements DurableObject {
   }
 
   private async requestOpsSpawn(card: Card): Promise<void> {
-    if (!this.bun) return
+    const machine_id = await this.state.storage.get<string>('machine_id')
+    if (!machine_id) return
     const initial: ChannelEvent = {
       content: `Finalize ${card.target_branch} for card ${card.id}: ${card.merge_strategy} into project default branch.`,
       meta: {
@@ -195,7 +240,7 @@ export class ProjectDO implements DurableObject {
       card.status = 'merging'
       await this.putCard(card)
     }
-    this.send({
+    await this.sendToMachine(machine_id, {
       type: 'spawn_session',
       project_id: card.project_id,
       project_path: '__bun_resolves_main__',
@@ -205,71 +250,36 @@ export class ProjectDO implements DurableObject {
     })
   }
 
-  // ─── Bun WS plumbing ───────────────────────────────────────────────────
-  private async acceptBunWs(req: Request): Promise<Response> {
-    if (req.headers.get('upgrade') !== 'websocket') {
-      return new Response('expected upgrade', { status: 426 })
+  private async sendToMachine(machine_id: string, msg: WorkerToBun): Promise<void> {
+    const id = this.env.MACHINE_DO.idFromName(machine_id)
+    const stub = this.env.MACHINE_DO.get(id)
+    try {
+      await stub.fetch('https://internal/send', {
+        method: 'POST',
+        body: JSON.stringify(msg),
+        headers: { 'content-type': 'application/json' },
+      })
+    } catch (err) {
+      console.error('sendToMachine failed', err)
     }
-    const presented = req.headers.get('authorization')?.replace(/^Bearer /, '') ?? ''
-    if (!this.env.BUN_SHARED_TOKEN || presented !== this.env.BUN_SHARED_TOKEN) {
-      return new Response('unauthorized', { status: 401 })
-    }
-    const pair = new WebSocketPair()
-    const [client, server] = [pair[0], pair[1]]
-    server.accept()
-    this.bun = { ws: server, machine_id: null, authed: true }
-
-    server.addEventListener('message', (ev) => this.onBunMessage(ev))
-    server.addEventListener('close', () => {
-      this.bun = null
-      this.liveSessions.clear()
-      this.notifyUi()
-    })
-    server.addEventListener('error', () => {
-      this.bun = null
-      this.liveSessions.clear()
-    })
-
-    return new Response(null, { status: 101, webSocket: client })
   }
 
-  private onBunMessage(ev: MessageEvent): void {
-    let msg: BunToWorker
-    try {
-      msg = JSON.parse(typeof ev.data === 'string' ? ev.data : '{}') as BunToWorker
-    } catch {
-      return
-    }
+  // ─── Inbound from MachineDO ────────────────────────────────────────────
+  private async onInboundFromMachine(msg: BunToWorker): Promise<void> {
     switch (msg.type) {
-      case 'hello':
-        if (this.bun) this.bun.machine_id = msg.machine_id
-        if (msg.protocol_version !== PROTOCOL_VERSION) {
-          // tolerate but log
-          console.warn('protocol mismatch from', msg.machine_id)
-        }
-        break
-      case 'heartbeat':
-        // refresh liveness on every heartbeat
-        this.liveSessions.clear()
-        for (const s of msg.sessions_live) {
-          this.liveSessions.set(`${s.project_id}::${s.branch}`, s.role)
-        }
-        break
       case 'session_registered':
-        this.liveSessions.set(`${msg.project_id}::${msg.branch}`, msg.role)
-        break
       case 'session_terminated':
-        this.liveSessions.delete(`${msg.project_id}::${msg.branch}`)
-        break
-      case 'reply_tool_call':
+        // could track liveness in storage; v1 keeps it stateless
+        return
+      case 'reply_tool_call': {
         if (this.seenToolCalls.has(msg.tool_call_id)) return
         this.seenToolCalls.add(msg.tool_call_id)
-        void this.applyReplyToolCall(msg)
-        break
+        await this.applyReplyToolCall(msg)
+        return
+      }
       case 'permission_request':
-        // v1.5 — store and surface to UI; for now just notify
-        this.notifyUi()
-        break
+        // v1.5 surface
+        return
     }
   }
 
@@ -347,41 +357,6 @@ export class ProjectDO implements DurableObject {
         }
         await this.putCard(card)
         break
-      }
-    }
-  }
-
-  private send(msg: WorkerToBun): void {
-    if (!this.bun) return
-    try {
-      this.bun.ws.send(JSON.stringify(msg))
-    } catch (err) {
-      console.error('bun ws send failed', err)
-    }
-  }
-
-  // ─── UI live-update WS ─────────────────────────────────────────────────
-  private async acceptUiWs(req: Request): Promise<Response> {
-    if (req.headers.get('upgrade') !== 'websocket') {
-      return new Response('expected upgrade', { status: 426 })
-    }
-    const pair = new WebSocketPair()
-    const [client, server] = [pair[0], pair[1]]
-    server.accept()
-    const sub: UiSubscriber = { ws: server }
-    this.uiSubs.add(sub)
-    server.addEventListener('close', () => this.uiSubs.delete(sub))
-    server.addEventListener('error', () => this.uiSubs.delete(sub))
-    return new Response(null, { status: 101, webSocket: client })
-  }
-
-  private notifyUi(): void {
-    const payload = JSON.stringify({ t: Date.now() })
-    for (const s of this.uiSubs) {
-      try {
-        s.ws.send(payload)
-      } catch {
-        this.uiSubs.delete(s)
       }
     }
   }

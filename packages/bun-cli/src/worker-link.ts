@@ -66,9 +66,18 @@ export class WorkerLink {
     this.outbox.push(msg)
   }
 
+  private buildWsUrl(): string {
+    // The WS endpoint is always /ws/bun/<machine_id>. We let the user supply
+    // either just the host (ws://host:port), the base /ws/bun/, or any old
+    // /ws/bun/<anything> URL; we normalize by overwriting the path segment.
+    const u = new URL(this.cfg.workerWs)
+    u.pathname = `/ws/bun/${this.cfg.machineId}`
+    return u.toString()
+  }
+
   private connect(): void {
     if (this.stopped) return
-    const ws = new WebSocket(this.cfg.workerWs, {
+    const ws = new WebSocket(this.buildWsUrl(), {
       // bun supports `headers` on WebSocket constructor
       headers: { authorization: `Bearer ${this.cfg.bearerToken}` },
     } as unknown as undefined)
@@ -76,7 +85,7 @@ export class WorkerLink {
 
     ws.addEventListener('open', () => {
       this.reconnectMs = RECONNECT_INITIAL_MS
-      // hello
+      console.log('[bun-cli] WS connected; sending hello')
       this.flushOutbox()
       this.send({
         type: 'hello',
@@ -102,17 +111,18 @@ export class WorkerLink {
       } catch {}
     })
 
-    const onDown = () => {
+    const onDown = (label: string) => () => {
       if (this.hbTimer) clearInterval(this.hbTimer)
       this.hbTimer = null
       this.ws = null
       if (this.stopped) return
       const wait = this.reconnectMs
       this.reconnectMs = Math.min(this.reconnectMs * 2, RECONNECT_MAX_MS)
+      console.warn(`[bun-cli] WS ${label}; reconnecting in ${wait}ms`)
       setTimeout(() => this.connect(), wait)
     }
-    ws.addEventListener('close', onDown)
-    ws.addEventListener('error', onDown)
+    ws.addEventListener('close', onDown('closed'))
+    ws.addEventListener('error', onDown('error'))
   }
 
   private flushOutbox(): void {

@@ -4,6 +4,7 @@ import type { Env } from './types.ts'
 import { indexHtml } from './ui.ts'
 
 export { ProjectDO } from './project-do.ts'
+export { MachineDO } from './machine-do.ts'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -11,15 +12,13 @@ const app = new Hono<{ Bindings: Env }>()
 app.get('/', (c) => c.html(indexHtml))
 
 // ─── Card CRUD + lifecycle (proxies to DO) ─────────────────────────────────
-app.all('/api/projects/:projectId/cards', forwardToDo('/cards'))
+app.all('/api/projects/:projectId/cards', forwardToProject('/cards'))
 app.all('/api/projects/:projectId/cards/:cardId/:action{approve|spawn|input}', (c) => {
   const { cardId, action } = c.req.param()
-  return forwardToDo(`/cards/${cardId}/${action}`)(c)
+  return forwardToProject(`/cards/${cardId}/${action}`)(c)
 })
 
-// ─── SSE: poll DO via WS, fan out as SSE so the embedded UI stays cookie-free ─
-// SSE tick every 3s so the client re-GETs /cards. v1 doesn't fan out DO state
-// changes via WS — the embedded UI just polls on each tick. Cheap, stateless.
+// SSE tick every 3s so the client re-GETs /cards. Stateless.
 app.get('/api/projects/:projectId/stream', (c) => {
   const stream = new ReadableStream({
     start(controller) {
@@ -48,9 +47,28 @@ app.get('/api/projects/:projectId/stream', (c) => {
   })
 })
 
-// ─── Bun supervisor WS endpoint ────────────────────────────────────────────
-app.get('/ws/bun/:projectId', async (c) => {
-  const stub = projectStub(c.env, c.req.param('projectId'))
+// ─── Registry: list known projects + machines ─────────────────────────────
+app.get('/api/projects', async (c) => {
+  const stub = projectStub(c.env, '__registry__')
+  return stub.fetch('https://internal/_registry/list')
+})
+
+app.get('/api/projects/:projectId/status', forwardToProject('/status'))
+
+// ─── Bun supervisor WS endpoint (machine-keyed) ───────────────────────────
+app.get('/ws/bun/:machineId', async (c) => {
+  const machineId = c.req.param('machineId')
+  if (!machineId) return c.text('machine_id required', 400)
+  const id = c.env.MACHINE_DO.idFromName(machineId)
+  const stub = c.env.MACHINE_DO.get(id)
+  // Stash the machine_id in the DO so it knows its own name (for state.id is opaque)
+  await stub
+    .fetch('https://internal/__set_machine_id', {
+      method: 'POST',
+      body: JSON.stringify({ machine_id: machineId }),
+      headers: { 'content-type': 'application/json' },
+    })
+    .catch(() => {})
   return stub.fetch('https://internal/__ws/bun', c.req.raw)
 })
 
@@ -60,7 +78,7 @@ function projectStub(env: Env, projectId: string) {
   return env.PROJECT_DO.get(id)
 }
 
-function forwardToDo(path: string) {
+function forwardToProject(path: string) {
   return async (c: { req: { raw: Request; param: (k: string) => string }; env: Env }) => {
     const stub = projectStub(c.env, c.req.param('projectId'))
     const url = new URL(c.req.raw.url)

@@ -65,9 +65,13 @@ link.setLiveSessionsProvider(() =>
 link.setProjectsAvailableProvider(() => store.listProjects().map((p) => p.project_id))
 link.start()
 
-console.log(`[bun-cli] started — socket=${cfg.socketPath} machine=${cfg.machineId}`)
-console.log(`[bun-cli] config=${configPath ?? '(none — using shell env)'}`)
-console.log(`[bun-cli] connecting to ${cfg.workerWs} …`)
+{
+  const u = new URL(cfg.workerWs)
+  u.pathname = `/ws/bun/${cfg.machineId}`
+  console.log(`[bun-cli] started — socket=${cfg.socketPath} machine=${cfg.machineId}`)
+  console.log(`[bun-cli] config=${configPath ?? '(none — using shell env)'}`)
+  console.log(`[bun-cli] connecting to ${u.toString()} …`)
+}
 {
   const known = store.listProjects()
   if (known.length === 0) {

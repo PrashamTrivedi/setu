@@ -12,6 +12,10 @@
       {
         "name": "PROJECT_DO",
         "class_name": "ProjectDO"
+      },
+      {
+        "name": "MACHINE_DO",
+        "class_name": "MachineDO"
       }
     ]
   },
@@ -19,6 +23,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["ProjectDO"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["MachineDO"]
     }
   ],
   "vars": {
