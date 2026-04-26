@@ -18,20 +18,24 @@ app.all('/api/projects/:projectId/cards/:cardId/:action{approve|spawn|input}', (
 })
 
 // ─── SSE: poll DO via WS, fan out as SSE so the embedded UI stays cookie-free ─
-app.get('/api/projects/:projectId/stream', async (c) => {
-  const projectId = c.req.param('projectId')
-  const stub = projectStub(c.env, projectId)
-  const ws = new WebSocket('https://internal/__ws/ui') // fake URL for typing
-  // Easier: just emit an SSE tick every 3s and let client GET cards on each tick.
+// SSE tick every 3s so the client re-GETs /cards. v1 doesn't fan out DO state
+// changes via WS — the embedded UI just polls on each tick. Cheap, stateless.
+app.get('/api/projects/:projectId/stream', (c) => {
   const stream = new ReadableStream({
     start(controller) {
       const enc = new TextEncoder()
-      const send = () => controller.enqueue(enc.encode('data: tick\n\n'))
+      const send = () => {
+        try {
+          controller.enqueue(enc.encode('data: tick\n\n'))
+        } catch {}
+      }
       const t = setInterval(send, 3000)
       send()
       c.req.raw.signal.addEventListener('abort', () => {
         clearInterval(t)
-        controller.close()
+        try {
+          controller.close()
+        } catch {}
       })
     },
   })
