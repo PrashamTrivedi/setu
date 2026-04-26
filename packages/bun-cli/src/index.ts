@@ -1,18 +1,34 @@
 #!/usr/bin/env bun
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { ChannelToBun, WorkerToBun } from '@kanban/protocol'
+import type { ChannelEvent, ChannelToBun, WorkerToBun } from '@kanban/protocol'
 import { BackChannelServer } from './back-channel.ts'
+import { runCli } from './cli.ts'
 import { loadConfig } from './config.ts'
 import { SessionRegistry, sessionKey } from './sessions.ts'
+import { type LocalStore, openStore } from './store.ts'
 import { WorkerLink } from './worker-link.ts'
 import { ensureWorktree } from './worktree.ts'
 
+// ─── CLI dispatch ────────────────────────────────────────────────────────────
+// `kanban-bun project add|list|rm` → run CLI and exit. Anything else (or
+// no argv) → run the supervisor.
+const argv = process.argv.slice(2)
+const cliStore = openStore()
+const cliResult = runCli(argv, cliStore)
+if (cliResult.handled) {
+  cliStore.close()
+  process.exit(cliResult.exitCode)
+}
+// CLI did not handle this invocation — drop the temporary handle and continue
+// into supervisor mode (which opens its own long-lived store).
+cliStore.close()
+
+// ─── Supervisor ──────────────────────────────────────────────────────────────
 const cfg = loadConfig()
+const store = openStore(cfg.dbPath)
 const registry = new SessionRegistry(cfg)
 
-// Resolve the channel server entry points relative to this file. In the
-// monorepo layout they sit at packages/channels/{role}/src/index.ts.
 const here = fileURLToPath(new URL('.', import.meta.url))
 const channelEntry = (role: 'kanban-work' | 'kanban-ops'): string =>
   resolve(here, '..', '..', 'channels', role, 'src', 'index.ts')
@@ -24,18 +40,38 @@ const link = new WorkerLink(cfg, (msg) => onWorkerMessage(msg))
 link.setLiveSessionsProvider(() =>
   registry.list().map((s) => ({ project_id: s.project_id, branch: s.branch, role: s.role })),
 )
+link.setProjectsAvailableProvider(() => store.listProjects().map((p) => p.project_id))
 link.start()
 
 console.log(`[bun-cli] started — socket=${cfg.socketPath} machine=${cfg.machineId}`)
 console.log(`[bun-cli] connecting to ${cfg.workerWs} …`)
+{
+  const known = store.listProjects()
+  if (known.length === 0) {
+    console.warn(
+      '[bun-cli] no projects registered — add one with `kanban-bun project add <id> <path>`',
+    )
+  } else {
+    console.log(
+      `[bun-cli] ${known.length} project(s) registered: ${known.map((p) => p.project_id).join(', ')}`,
+    )
+  }
+}
+
+function projectPathFor(project_id: string, store: LocalStore): string | null {
+  const row = store.getProject(project_id)
+  return row?.project_path ?? null
+}
 
 // ─── Worker → Bun ────────────────────────────────────────────────────────────
 async function onWorkerMessage(msg: WorkerToBun): Promise<void> {
   switch (msg.type) {
     case 'ensure_worktree': {
-      const projectPath = cfg.projects.get(msg.project_id)
+      const projectPath = projectPathFor(msg.project_id, store)
       if (!projectPath) {
-        console.error(`[bun-cli] unknown project ${msg.project_id}`)
+        console.error(
+          `[bun-cli] unknown project ${msg.project_id} — register with \`kanban-bun project add\``,
+        )
         return
       }
       try {
@@ -46,7 +82,7 @@ async function onWorkerMessage(msg: WorkerToBun): Promise<void> {
       return
     }
     case 'spawn_session': {
-      const projectPath = cfg.projects.get(msg.project_id)
+      const projectPath = projectPathFor(msg.project_id, store)
       if (!projectPath) {
         console.error(`[bun-cli] cannot spawn — unknown project ${msg.project_id}`)
         return
@@ -71,8 +107,6 @@ async function onWorkerMessage(msg: WorkerToBun): Promise<void> {
         branch: msg.branch,
         role: msg.role,
       })
-      // Initial event is delivered once the channel server says hello.
-      // We retry every 250ms for up to 10s, then give up.
       if (msg.initial_event) waitAndDeliver(msg.project_id, msg.branch, msg.initial_event)
       return
     }
@@ -84,7 +118,6 @@ async function onWorkerMessage(msg: WorkerToBun): Promise<void> {
       return
     }
     case 'permission_verdict': {
-      // broadcast — only one channel will own the request_id
       for (const s of registry.list()) {
         back.send(sessionKey(s.project_id, s.branch), {
           type: 'permission_verdict',
@@ -107,11 +140,7 @@ async function onWorkerMessage(msg: WorkerToBun): Promise<void> {
   }
 }
 
-function waitAndDeliver(
-  project_id: string,
-  branch: string,
-  event: import('@kanban/protocol').ChannelEvent,
-): void {
+function waitAndDeliver(project_id: string, branch: string, event: ChannelEvent): void {
   const key = sessionKey(project_id, branch)
   const started = Date.now()
   const tick = () => {
@@ -166,6 +195,7 @@ const shutdown = (sig: string) => {
   link.stop()
   back.closeAll('shutdown')
   for (const s of registry.list()) registry.terminate(s.project_id, s.branch)
+  store.close()
   process.exit(0)
 }
 process.on('SIGINT', () => shutdown('SIGINT'))

@@ -6,24 +6,10 @@ export interface BunConfig {
   workerWs: string
   bearerToken: string
   machineId: string
-  projects: Map<string, string> // project_id -> absolute project_path
   claudeBin: string
   socketPath: string
-}
-
-function parseProjects(raw: string): Map<string, string> {
-  const out = new Map<string, string>()
-  for (const piece of raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)) {
-    const eq = piece.indexOf('=')
-    if (eq < 0) continue
-    const id = piece.slice(0, eq).trim()
-    const path = piece.slice(eq + 1).trim()
-    if (id && path) out.set(id, path)
-  }
-  return out
+  /** Override for the local SQLite store. Empty = use defaultDbPath(). */
+  dbPath?: string
 }
 
 function defaultSocketPath(): string {
@@ -42,8 +28,8 @@ export function loadConfig(): BunConfig {
     workerWs: must('KANBAN_WORKER_WS'),
     bearerToken: must('KANBAN_BEARER_TOKEN'),
     machineId: process.env.KANBAN_MACHINE_ID ?? 'unnamed-machine',
-    projects: parseProjects(process.env.KANBAN_PROJECTS ?? ''),
     claudeBin: process.env.CLAUDE_BIN ?? 'claude',
     socketPath: process.env.KANBAN_SOCKET_PATH ?? defaultSocketPath(),
+    dbPath: process.env.KANBAN_DB_PATH,
   }
 }

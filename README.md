@@ -68,12 +68,19 @@ bun run setup:local
 Then edit:
 
 - `packages/worker/.dev.vars` — paste a freshly generated bearer token
-- `packages/bun-cli/.env` — paste the **same** token, set `KANBAN_PROJECTS=demo=/abs/path/to/your/repo`
+- `packages/bun-cli/.env` — paste the **same** token
 
 Generate the token with:
 
 ```bash
 openssl rand -hex 32
+```
+
+Register your project on the Bun side (one-time, persisted in SQLite):
+
+```bash
+cd packages/bun-cli
+bun run start project add demo /abs/path/to/your/repo
 ```
 
 ## Local development (wrangler dev on :9494)
@@ -106,13 +113,30 @@ survive across dev restarts.
 
 Project metadata (`display_name`, `default_branch`, `repo_policy`) lives in
 the Worker's Durable Object (SQLite-backed). The Bun supervisor keeps the
-machine-local `project_path` in its own store. Both sides share a single DDL
-defined in `@kanban/protocol/schema.ts` — the `projects` table has identical
-shape on both stores; only `project_path` is populated on the Bun side.
+machine-local `project_path` in its own SQLite store at
+`$XDG_DATA_HOME/kanban-bun/state.db` (override with `KANBAN_DB_PATH`). Both
+sides share a single DDL defined in `@kanban/protocol/schema.ts` — the
+`projects` table has identical shape on both stores; only `project_path` is
+populated on the Bun side.
 
-In v1 the Bun side reads `KANBAN_PROJECTS` from `.env`. The follow-up
-refactor moves this to a local SQLite store managed via
-`kanban-bun project add|list|rm` and removes the env var.
+Manage the local project list with the `kanban-bun` CLI:
+
+```bash
+cd packages/bun-cli
+
+# add
+bun run start project add demo /home/me/code/demo
+bun run start project add sun /home/me/code/sunbloom --name "Sunbloom" --default-branch main
+
+# list (id, repo_policy, default_branch, path)
+bun run start project list
+
+# remove
+bun run start project rm demo
+```
+
+When the supervisor boots, it logs the registered projects and refuses to
+spawn for any `project_id` it doesn't know about.
 
 ## Scripts (root)
 

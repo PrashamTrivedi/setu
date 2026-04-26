@@ -17,14 +17,13 @@ export class WorkerLink {
   private hbTimer: ReturnType<typeof setInterval> | null = null
   private stopped = false
 
-  // Live sessions reported on heartbeat — populated by the supervisor.
-  liveSessions: () => BunToWorker extends { type: 'heartbeat' } ? never : never = () =>
-    undefined as never
   private getLiveSessions: () => Array<{
     project_id: string
     branch: string
     role: 'kanban-work' | 'kanban-ops'
   }> = () => []
+
+  private getProjectsAvailable: () => string[] = () => []
 
   constructor(cfg: BunConfig, onInbound: OnInbound) {
     this.cfg = cfg
@@ -35,6 +34,10 @@ export class WorkerLink {
     fn: () => Array<{ project_id: string; branch: string; role: 'kanban-work' | 'kanban-ops' }>,
   ): void {
     this.getLiveSessions = fn
+  }
+
+  setProjectsAvailableProvider(fn: () => string[]): void {
+    this.getProjectsAvailable = fn
   }
 
   start(): void {
@@ -78,7 +81,7 @@ export class WorkerLink {
       this.send({
         type: 'hello',
         machine_id: this.cfg.machineId,
-        projects_available: [...this.cfg.projects.keys()],
+        projects_available: this.getProjectsAvailable(),
         protocol_version: PROTOCOL_VERSION,
       })
       this.flushOutbox()

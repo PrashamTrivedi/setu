@@ -12,7 +12,8 @@
     "dev": "bun --watch run src/index.ts",
     "build": "bun build src/index.ts --target=bun --outdir dist",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run --root ../.."
+    "test": "vitest run --root ../..",
+    "project": "bun run src/index.ts project"
   },
   "dependencies": {
     "@kanban/protocol": "workspace:*"
