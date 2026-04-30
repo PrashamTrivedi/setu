@@ -1,5 +1,10 @@
 #!/usr/bin/env bun
-import { type ToolDefinition, runChannelServer } from '@kanban/channel-runtime'
+import {
+  type ToolDefinition,
+  dispatchToolDefinition,
+  runChannelServer,
+} from '@kanban/channel-runtime'
+import type { ReplyToolName } from '@kanban/protocol'
 
 const tools: ToolDefinition[] = [
   {
@@ -48,6 +53,7 @@ const tools: ToolDefinition[] = [
       required: ['card_id', 'note'],
     },
   },
+  dispatchToolDefinition,
 ]
 
 await runChannelServer({
@@ -59,7 +65,7 @@ await runChannelServer({
     forward({
       type: 'reply_tool_call',
       tool_call_id: crypto.randomUUID(),
-      tool_name: name as 'update_card' | 'request_input' | 'report_progress',
+      tool_name: name as ReplyToolName,
       args,
     })
     return { content: [{ type: 'text', text: 'queued' }] }

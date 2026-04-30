@@ -58,6 +58,25 @@ export interface Project {
 export type SessionRole = 'kanban-work' | 'kanban-ops'
 export type SessionState = 'offline' | 'standby' | 'live'
 
+/**
+ * The "voice" an agent uses when posting a dispatch. The UI uses this to
+ * style and prioritize the card.
+ *  - decided   : "I picked X over Y because Z"        (informational)
+ *  - asking    : "I need you to choose"               (blocks the card)
+ *  - noting    : "fyi I'm doing X"                    (low-noise progress)
+ *  - committing: "going with X unless you say otherwise within N ms"
+ *                (paired with default_after_ms; auto-resolves on timeout)
+ */
+export type DispatchKind = 'decided' | 'asking' | 'noting' | 'committing'
+
+/**
+ * Scope of a permission verdict. UI → Worker only; the Worker compresses to
+ * plain `allow|deny` on the way to Bun, so Claude Code's channel surface is
+ * unchanged. The allowlist that backs `branch`/`forever` is held in the
+ * Worker DO, not on the wire.
+ */
+export type PermissionScope = 'once' | 'branch' | 'forever'
+
 export interface SessionKey {
   project_id: string
   branch: string

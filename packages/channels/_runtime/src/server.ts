@@ -10,6 +10,29 @@ export interface ToolDefinition {
   inputSchema: { type: 'object'; properties: Record<string, unknown>; required?: string[] }
 }
 
+/**
+ * Shared `dispatch` tool definition. Both roles register this so any agent
+ * can author a dispatch to the user (and optionally route to a peer role).
+ * Worker handles fan-out: stores on the card feed and (if `to_role` is set)
+ * emits a peer_message channel event into the target session.
+ */
+export const dispatchToolDefinition: ToolDefinition = {
+  name: 'dispatch',
+  description:
+    'Author a short, first-person message addressed to the human (and optionally a peer agent). Use this for narration, decisions, asks, and commitments — not for state machine moves (use update_card / report_step for those). kind="decided" reports a choice made; kind="asking" blocks the card on a question; kind="noting" is low-noise progress; kind="committing" pairs with default_after_ms — the dispatch auto-resolves as accepted after that window unless the user intervenes. Set to_role only when you want a peer agent in the same project to see this inline.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      card_id: { type: 'string' },
+      body: { type: 'string' },
+      kind: { type: 'string', enum: ['decided', 'asking', 'noting', 'committing'] },
+      to_role: { type: 'string', enum: ['kanban-work', 'kanban-ops'] },
+      default_after_ms: { type: 'number' },
+    },
+    required: ['card_id', 'body', 'kind'],
+  },
+}
+
 export interface ChannelServerOptions {
   role: SessionRole
   serverName: string
