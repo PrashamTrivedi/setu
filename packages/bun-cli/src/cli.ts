@@ -36,6 +36,14 @@ CONFIG / ENVIRONMENT
     KANBAN_SOCKET_PATH     back-channel UDS path
                            (default: \$XDG_RUNTIME_DIR/setu.sock)
     CLAUDE_BIN             path to Claude Code binary (default: claude)
+
+  Tmux-aware defaults:
+    When run inside tmux (\$TMUX set), the *defaults* for socket path and
+    machine id are scoped to the current tmux session+window so multiple
+    setu supervisors can run side-by-side in different windows without
+    colliding. Explicit KANBAN_SOCKET_PATH / KANBAN_MACHINE_ID always win.
+      socket  → \$XDG_RUNTIME_DIR/setu-s<S>w<W>.sock
+      machine → <baseMachineId>-s<S>w<W>
 `
 
 interface ParsedFlags {
