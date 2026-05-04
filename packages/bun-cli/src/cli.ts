@@ -1,5 +1,11 @@
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import {
+  activeProfileName,
+  listProfiles,
+  profilesDir,
+  useProfile,
+} from './config-file.ts'
 import type { LocalStore } from './store.ts'
 
 const HELP = `setu — Bun supervisor for kanban-channels
@@ -12,6 +18,8 @@ USAGE
   setu project list
   setu project rm <id>
   setu config path                  print the resolved config file path
+  setu config list                  list profiles in ~/.config/setu/profiles/
+  setu config use <name>            point ~/.config/setu/.env at profiles/<name>.env
   setu help
 
 NOTE
@@ -36,6 +44,12 @@ CONFIG / ENVIRONMENT
     KANBAN_SOCKET_PATH     back-channel UDS path
                            (default: \$XDG_RUNTIME_DIR/setu.sock)
     CLAUDE_BIN             path to Claude Code binary (default: claude)
+
+  Profiles (for switching between local and deployed Workers):
+    Drop one .env per environment under \$XDG_CONFIG_HOME/setu/profiles/,
+    e.g. local.env and prod.env. \`setu config use prod\` flips the
+    \$XDG_CONFIG_HOME/setu/.env symlink to point at that profile, so the
+    next \`setu supervisor\` picks it up automatically.
 
   Tmux-aware defaults:
     When run inside tmux (\$TMUX set), the *defaults* for socket path and
@@ -133,10 +147,41 @@ export function runCli(
 
   if (cmd === 'config') {
     if (sub === 'path') {
+      const active = activeProfileName()
       log(resolvedConfigPath ?? '(no config file resolved)')
+      if (active) log(`active profile: ${active}`)
       return { handled: true, exitCode: 0 }
     }
-    log('usage: setu config path')
+    if (sub === 'list') {
+      const profiles = listProfiles()
+      const active = activeProfileName()
+      if (profiles.length === 0) {
+        log(`(no profiles in ${profilesDir()})`)
+        log(`  create one: ${profilesDir()}/<name>.env`)
+        return { handled: true, exitCode: 0 }
+      }
+      for (const p of profiles) {
+        const marker = p.name === active ? '*' : ' '
+        log(`${marker} ${p.name}\t${p.path}`)
+      }
+      return { handled: true, exitCode: 0 }
+    }
+    if (sub === 'use') {
+      const [name] = rest
+      if (!name) {
+        log('usage: setu config use <name>')
+        return { handled: true, exitCode: 2 }
+      }
+      const r = useProfile(name)
+      if (!r.ok) {
+        log(r.reason)
+        return { handled: true, exitCode: 1 }
+      }
+      log(`active profile → ${name}`)
+      log(`  ${r.configPath} → ${r.path}`)
+      return { handled: true, exitCode: 0 }
+    }
+    log('usage: setu config <path|list|use>')
     return { handled: true, exitCode: 2 }
   }
 
