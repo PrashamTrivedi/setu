@@ -824,6 +824,7 @@ export const indexHtml = /* html */ `<!doctype html>
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .modal {
     width: 100%; max-width: 560px;
+    min-width: 0;
     background: var(--paper);
     color: var(--ink);
     border-radius: 18px 18px 0 0;
@@ -960,9 +961,10 @@ export const indexHtml = /* html */ `<!doctype html>
   .step {
     border-top: 1px dashed var(--rule-2);
     padding: 14px 0 4px;
-    display: grid; grid-template-columns: 26px 1fr;
+    display: grid; grid-template-columns: 26px minmax(0, 1fr);
     gap: 12px;
   }
+  .step > *:nth-child(2) { min-width: 0; }
   .step:first-child { border-top: none; padding-top: 4px; }
   .step .n {
     width: 22px; height: 22px;
@@ -2164,8 +2166,8 @@ export const indexHtml = /* html */ `<!doctype html>
         <div>
           <p class="what">Install the CLI on the new machine.</p>
           <div class="codeblock">
-            <button class="copy-btn" data-copy="curl -fsSL https://setu.sh/install | sh">copy</button>
-            <span class="c1">curl</span> <span class="c2">-fsSL https://setu.sh/install</span> <span class="c1">| sh</span>
+            <button class="copy-btn" data-copy="curl -fsSL https://setu.prashamhtrivedi.app/install | sh">copy</button>
+            <span class="c1">curl</span> <span class="c2">-fsSL https://setu.prashamhtrivedi.app/install</span> <span class="c1">| sh</span>
             <br/><span class="c3"># or via Bun:</span>
             <br/><span class="c1">bun</span> <span class="c2">add -g @setu/cli</span>
           </div>
