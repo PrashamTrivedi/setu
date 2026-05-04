@@ -40,6 +40,13 @@
   "vars": {
     "ALLOWED_PROJECTS": "demo"
   },
+  "routes": [
+    {
+      "pattern": "setu.prashamhtrivedi.app",
+      "zone_name": "prashamhtrivedi.app",
+      "custom_domain": true
+    }
+  ],
   "dev": {
     "port": 9494,
     "ip": "127.0.0.1"
