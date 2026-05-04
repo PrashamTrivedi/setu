@@ -121,7 +121,7 @@ export type UiToWorker =
       behavior: 'allow' | 'deny'
       scope: PermissionScope
     }
-  | { type: 'redirect'; project_id: string; card_id: string; body: string }
+  | { type: 'redirect'; project_id: string; card_id: string; body: string; id?: string }
   | { type: 'spawn_card'; project_id: string; card_id: string }
   | { type: 'register_push'; subscription: PushSubscriptionJSON }
   | { type: 'unregister_push' }
@@ -147,6 +147,7 @@ export type WorkerToUi =
       machines: MachineSummary[]
     }
   | { type: 'digest'; project_id: string; items: FeedItem[] }
+  | { type: 'redirect_ack'; id: string; ok: boolean; reason?: string }
   | { type: 'error'; reason: string }
   | { type: 'ping'; ts: number }
 

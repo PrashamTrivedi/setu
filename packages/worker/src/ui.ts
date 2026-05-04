@@ -4,6 +4,119 @@
 // Connects to /ws/ui with a UI bearer in localStorage; renders FeedItems
 // filtered to the focused card; user redirects render optimistically as
 // right-aligned bubbles. Single self-contained file shipped with the Worker.
+
+// Markdown renderer source (browser-side). Pulled out of the indexHtml
+// template via String.raw so regex backslashes survive intact instead of
+// being eaten by template-literal cooking. Safe-by-construction: every
+// character that ends up as HTML has gone through escape() or is a fixed tag.
+// Supports: # headings, **bold**, *italic*, `code`, ```fenced```,
+// - / 1. lists, > blockquotes, [text](url) links (http/https/mailto/relative),
+// horizontal rules, paragraphs.
+const BT = '`'
+const markdownRendererSrc = String.raw`
+  function renderMarkdown(src) {
+    if (!src) return ''
+    const SENTINEL = ''
+    let text = String(src).replace(/\r\n?/g, '\n')
+
+    const blocks = []
+    text = text.replace(/` + BT + BT + BT + String.raw`([a-zA-Z0-9_+-]*)\n?([\s\S]*?)` + BT + BT + BT + String.raw`/g, (_, lang, code) => {
+      const i = blocks.push({ lang, code }) - 1
+      return SENTINEL + 'B' + i + SENTINEL
+    })
+
+    text = escape(text)
+
+    const inlines = []
+    text = text.replace(/` + BT + String.raw`([^` + BT + String.raw`\n]+)` + BT + String.raw`/g, (_, code) => {
+      const i = inlines.push(code) - 1
+      return SENTINEL + 'I' + i + SENTINEL
+    })
+
+    const lines = text.split('\n')
+    const out = []
+    let i = 0
+    const sentBlock = new RegExp('^' + SENTINEL + 'B(\\d+)' + SENTINEL + '$')
+    while (i < lines.length) {
+      const line = lines[i]
+
+      const blockM = line.match(sentBlock)
+      if (blockM) {
+        const b = blocks[Number(blockM[1])]
+        out.push('<pre><code>' + escape(b.code.replace(/\n$/, '')) + '</code></pre>')
+        i++; continue
+      }
+
+      const h = line.match(/^(#{1,6})\s+(.+?)\s*#*$/)
+      if (h) {
+        const lv = h[1].length
+        out.push('<h' + lv + '>' + inline(h[2]) + '</h' + lv + '>')
+        i++; continue
+      }
+
+      if (/^\s*(?:---+|\*\*\*+|___+)\s*$/.test(line)) {
+        out.push('<hr/>'); i++; continue
+      }
+
+      if (/^&gt;\s?/.test(line)) {
+        const buf = []
+        while (i < lines.length && /^&gt;\s?/.test(lines[i])) {
+          buf.push(lines[i].replace(/^&gt;\s?/, '')); i++
+        }
+        out.push('<blockquote>' + inline(buf.join(' ')) + '</blockquote>')
+        continue
+      }
+
+      if (/^\s*[-*+]\s+/.test(line)) {
+        const items = []
+        while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+          items.push('<li>' + inline(lines[i].replace(/^\s*[-*+]\s+/, '')) + '</li>'); i++
+        }
+        out.push('<ul>' + items.join('') + '</ul>')
+        continue
+      }
+
+      if (/^\s*\d+\.\s+/.test(line)) {
+        const items = []
+        while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+          items.push('<li>' + inline(lines[i].replace(/^\s*\d+\.\s+/, '')) + '</li>'); i++
+        }
+        out.push('<ol>' + items.join('') + '</ol>')
+        continue
+      }
+
+      if (line.trim() === '') { i++; continue }
+
+      const buf = [line]; i++
+      while (
+        i < lines.length &&
+        lines[i].trim() !== '' &&
+        !/^(#{1,6}\s|&gt;\s?|\s*[-*+]\s+|\s*\d+\.\s+)/.test(lines[i]) &&
+        !sentBlock.test(lines[i])
+      ) { buf.push(lines[i]); i++ }
+      out.push('<p>' + inline(buf.join('\n').replace(/\n/g, '<br/>')) + '</p>')
+    }
+
+    let html = out.join('')
+    html = html.replace(new RegExp(SENTINEL + 'I(\\d+)' + SENTINEL, 'g'), (_, n) =>
+      '<code>' + escape(inlines[Number(n)]) + '</code>')
+    return html
+
+    function inline(s) {
+      s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, href) => {
+        const ok = /^(https?:\/\/|mailto:|\/|#)/i.test(href)
+        const safe = ok ? href : '#'
+        return '<a href="' + safe + '" rel="noopener noreferrer" target="_blank">' + label + '</a>'
+      })
+      s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+      s = s.replace(/__([^_\n]+)__/g, '<strong>$1</strong>')
+      s = s.replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
+      s = s.replace(/(^|[^_\w])_([^_\n]+?)_(?!\w)/g, '$1<em>$2</em>')
+      return s
+    }
+  }
+`
+
 export const indexHtml = /* html */ `<!doctype html>
 <html lang="en">
 <head>
@@ -466,9 +579,55 @@ export const indexHtml = /* html */ `<!doctype html>
   .bubble .byline .kind.committing { color: var(--warn); border-color: var(--warn); }
   .bubble .body {
     font-family: var(--serif); font-size: 14.5px; line-height: 1.45;
-    color: var(--ink); margin: 0; white-space: pre-wrap; word-break: break-word;
+    color: var(--ink); margin: 0; word-break: break-word;
   }
+  .bubble .body.plain { white-space: pre-wrap; }
   .bubble .body em { color: var(--muted); }
+  .bubble .body p { margin: 0 0 8px; }
+  .bubble .body p:last-child { margin-bottom: 0; }
+  .bubble .body h1, .bubble .body h2, .bubble .body h3,
+  .bubble .body h4, .bubble .body h5, .bubble .body h6 {
+    font-family: var(--serif); font-weight: 700; color: var(--ink);
+    margin: 12px 0 4px; line-height: 1.2;
+  }
+  .bubble .body h1 { font-size: 18px; }
+  .bubble .body h2 { font-size: 16px; }
+  .bubble .body h3 { font-size: 15px; }
+  .bubble .body h4, .bubble .body h5, .bubble .body h6 { font-size: 14px; }
+  .bubble .body :first-child { margin-top: 0; }
+  .bubble .body :last-child { margin-bottom: 0; }
+  .bubble .body ul, .bubble .body ol {
+    margin: 4px 0 8px; padding-left: 22px;
+  }
+  .bubble .body li { margin: 2px 0; }
+  .bubble .body li > p { margin: 0; }
+  .bubble .body blockquote {
+    margin: 6px 0; padding: 2px 0 2px 10px;
+    border-left: 2px solid var(--rule-2); color: var(--muted);
+  }
+  .bubble .body code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    border: 1px solid var(--rule-3); border-radius: 4px;
+    padding: 0 4px;
+  }
+  .bubble .body pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.45;
+    background: color-mix(in srgb, var(--ink) 6%, var(--paper));
+    border: 1px solid var(--rule-3); border-radius: 6px;
+    padding: 8px 10px; margin: 6px 0;
+    overflow-x: auto; white-space: pre;
+  }
+  .bubble .body pre code {
+    background: transparent; border: 0; padding: 0; border-radius: 0;
+  }
+  .bubble .body a {
+    color: var(--accent); text-decoration: underline;
+    text-decoration-thickness: 1px; text-underline-offset: 2px;
+  }
+  .bubble .body a:hover { text-decoration-thickness: 2px; }
+  .bubble .body strong { color: var(--ink); }
+  .bubble .body hr { border: 0; border-top: 1px dashed var(--rule-2); margin: 10px 0; }
   .bubble.committing {
     border-left: 3px solid var(--accent);
     background: color-mix(in srgb, var(--accent-bg) 22%, var(--paper-2));
@@ -501,12 +660,35 @@ export const indexHtml = /* html */ `<!doctype html>
     font-family: var(--serif); font-size: 14.5px; line-height: 1.4;
     white-space: pre-wrap; word-break: break-word;
   }
-  .me.pending { opacity: 0.55; }
+  .me.pending { opacity: 0.7; }
+  .me.failed { opacity: 0.85; outline: 1px solid var(--warn); }
   .me .ts {
     display: block;
     font-family: var(--mono); font-size: 9.5px;
     color: color-mix(in srgb, var(--paper) 65%, transparent);
     letter-spacing: .1em; margin-top: 4px; text-align: right;
+  }
+  .me .progress {
+    display: block;
+    height: 2px;
+    margin-top: 6px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--paper) 18%, transparent);
+    overflow: hidden;
+    position: relative;
+  }
+  .me .progress::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -40%;
+    width: 40%; height: 100%;
+    background: color-mix(in srgb, var(--paper) 75%, transparent);
+    border-radius: 2px;
+    animation: meprog 1.1s ease-in-out infinite;
+  }
+  @keyframes meprog {
+    0%   { left: -40%; }
+    100% { left: 100%; }
   }
 
   /* state line + tool call */
@@ -1154,6 +1336,7 @@ export const indexHtml = /* html */ `<!doctype html>
     cards: new Map(),    // \`\${project_id}:\${card_id}\` → Card REST shape
     focusKey: null,      // \`\${project_id}:\${card_id}\`
     userMessages: new Map(), // card_key → [{ ts, body, pending, id }]
+    pendingSends: new Map(), // id → msg (awaiting redirect_ack)
     filter: localStorage.getItem(LS_FILTER) || 'all',
     reconnectMs: 1000,
   }
@@ -1288,6 +1471,19 @@ export const indexHtml = /* html */ `<!doctype html>
       case 'project_state':
       case 'ping':
         break
+      case 'redirect_ack': {
+        const m = state.pendingSends.get(msg.id)
+        if (!m) break
+        state.pendingSends.delete(msg.id)
+        if (m.timeoutHandle) clearTimeout(m.timeoutHandle)
+        m.pending = false
+        if (!msg.ok) {
+          m.failed = true
+          toast('send failed' + (msg.reason ? ': ' + msg.reason : ''))
+        }
+        renderAll()
+        break
+      }
       case 'error':
         toast('error: ' + (msg.reason || 'unknown'))
         break
@@ -1663,11 +1859,16 @@ export const indexHtml = /* html */ `<!doctype html>
 
   function renderMeBubble(m) {
     const el = document.createElement('div')
-    el.className = 'me' + (m.pending ? ' pending' : '')
+    el.className = 'me' + (m.pending ? ' pending' : '') + (m.failed ? ' failed' : '')
     el.appendChild(document.createTextNode(m.body))
+    if (m.pending) {
+      const bar = document.createElement('span')
+      bar.className = 'progress'
+      el.appendChild(bar)
+    }
     const ts = document.createElement('span')
     ts.className = 'ts'
-    ts.textContent = m.pending ? 'sending…' : relTime(m.ts)
+    ts.textContent = m.pending ? 'sending…' : m.failed ? 'failed — tap to retry' : relTime(m.ts)
     el.appendChild(ts)
     return el
   }
@@ -1729,9 +1930,9 @@ export const indexHtml = /* html */ `<!doctype html>
     byline.appendChild(ts)
     article.appendChild(byline)
 
-    const body = document.createElement('p')
+    const body = document.createElement('div')
     body.className = 'body'
-    body.textContent = item.body || ''
+    body.innerHTML = renderMarkdown(item.body || '')
     article.appendChild(body)
 
     const footers = document.createElement('div')
@@ -1826,14 +2027,23 @@ export const indexHtml = /* html */ `<!doctype html>
     const msg = { id, ts: Date.now(), body, pending: true }
     if (!state.userMessages.has(state.focusKey)) state.userMessages.set(state.focusKey, [])
     state.userMessages.get(state.focusKey).push(msg)
-    const ok = send({ type: 'redirect', project_id: pid, card_id: cid, body })
+    const ok = send({ type: 'redirect', id, project_id: pid, card_id: cid, body })
     if (!ok) {
-      // mark failed: replace pending with same body, no toast spam
       msg.pending = false
       msg.failed = true
       toast('not connected')
     } else {
-      msg.pending = false
+      // Stay pending until the worker acks. Fail safe via timeout if the
+      // ack never arrives (network blip, DO eviction, etc.) so the bubble
+      // doesn't lie about "sending…" forever.
+      msg.timeoutHandle = setTimeout(() => {
+        if (!msg.pending) return
+        msg.pending = false
+        msg.failed = true
+        toast('send timed out')
+        renderPane()
+      }, 15000)
+      state.pendingSends.set(id, msg)
     }
     dom.composerInput.value = ''
     autoResize(dom.composerInput)
@@ -2152,6 +2362,8 @@ setu project add new-repo ~/code/new-repo">copy</button>
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]))
   }
+
+  ${markdownRendererSrc}
 
   function renderAll() {
     renderMeta()

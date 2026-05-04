@@ -171,12 +171,22 @@ export class UserDO implements DurableObject {
         // Forward to ProjectDO's existing card-input REST. ProjectDO clears
         // pending_input on the card and emits an input_response push to the
         // paired Bun supervisor, which the channel-server feeds to Claude.
-        await this.callProject(
-          msg.project_id,
-          `/cards/${msg.card_id}/input`,
-          'POST',
-          JSON.stringify({ answer: msg.body }),
-        ).catch((err) => console.error('redirect forward failed', err))
+        let ok = false
+        let reason: string | undefined
+        try {
+          const res = await this.callProject(
+            msg.project_id,
+            `/cards/${msg.card_id}/input`,
+            'POST',
+            JSON.stringify({ answer: msg.body }),
+          )
+          ok = res.ok
+          if (!ok) reason = `project ${res.status}`
+        } catch (err) {
+          console.error('redirect forward failed', err)
+          reason = err instanceof Error ? err.message : 'forward failed'
+        }
+        if (msg.id) this.send(entry.ws, { type: 'redirect_ack', id: msg.id, ok, reason })
         return
       }
       case 'spawn_card':

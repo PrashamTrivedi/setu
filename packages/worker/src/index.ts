@@ -28,7 +28,12 @@ app.get('/api/projects/:projectId/status', forwardToProject('/status'))
 
 // ─── UI WebSocket (Phase 2) ───────────────────────────────────────────────
 app.get('/ws/ui', (c) => {
-  return userStub(c.env).fetch(rewritten(c.req.raw, '/__ws/ui'))
+  // Forward to UserDO. Reusing `c.req.raw` directly preserves the WebSocket
+  // upgrade handshake; the search string (carrying `access_token` for browser
+  // clients that can't set Authorization headers) is appended to the internal
+  // path so UserDO can read it from `req.url`.
+  const search = new URL(c.req.raw.url).search
+  return userStub(c.env).fetch(`https://internal/__ws/ui${search}`, c.req.raw)
 })
 
 // ─── Bun supervisor WS endpoint (machine-keyed) ───────────────────────────
@@ -69,12 +74,6 @@ function forwardToProject(path: string) {
     }
     return stub.fetch(`https://internal${path}${url.search}`, init)
   }
-}
-
-/** Rewrite a request to a new internal path while keeping headers/method/body. */
-function rewritten(req: Request, path: string): Request {
-  const url = new URL(req.url)
-  return new Request(`https://internal${path}${url.search}`, req)
 }
 
 export default app
