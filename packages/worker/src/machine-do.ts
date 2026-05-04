@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
-import type { BunToWorker, WorkerToBun } from '@kanban/protocol'
+import type { BunToWorker, SessionLiveSummary, WorkerToBun } from '@kanban/protocol'
 import { PROTOCOL_VERSION } from '@kanban/protocol'
 import type { Env } from './types.ts'
 
@@ -19,8 +19,12 @@ interface BunSession {
  *   - inbound  Bun → ProjectDO  via env.PROJECT_DO.idFromName(project_id)
  *   - outbound ProjectDO → Bun  via this DO's /send endpoint (DO-to-DO RPC)
  *
- * The DO also writes machine→projects mappings to env.PROJECT_DO('__registry__')
- * so the UI can list all known projects without enumerating DO instances.
+ * Phase 1.5: the latest `sessions_live` snapshot from heartbeats is persisted
+ * so ProjectDO can resolve `to_role` peer routing without keeping a live RPC
+ * channel back to the supervisor.
+ *
+ * Phase 2: machine→projects registration moves to UserDO. The legacy
+ * `__registry__` ProjectDO singleton is retired.
  */
 export class MachineDO implements DurableObject {
   private state: DurableObjectState
@@ -51,6 +55,12 @@ export class MachineDO implements DurableObject {
       return Response.json({ ok })
     }
 
+    if (req.method === 'GET' && path === '/sessions_live') {
+      const sessions = (await this.state.storage.get<SessionLiveSummary[]>('sessions_live')) ?? []
+      const last_heartbeat_ts = (await this.state.storage.get<number>('last_heartbeat_ts')) ?? null
+      return Response.json({ sessions, last_heartbeat_ts })
+    }
+
     if (req.method === 'GET' && path === '/status') {
       return Response.json({
         connected: !!this.session,
@@ -76,7 +86,6 @@ export class MachineDO implements DurableObject {
     const pair = new WebSocketPair()
     const [client, server] = [pair[0], pair[1]]
     server.accept()
-    // machine_id comes from the URL path; we'll confirm against the hello.
     const machineIdFromState = (await this.state.storage.get<string>('machine_id')) ?? 'unknown'
     this.session = {
       ws: server,
@@ -100,7 +109,7 @@ export class MachineDO implements DurableObject {
 
   private onDisconnect(): void {
     if (!this.session) return
-    void this.unregisterFromProjects(this.session.projects, this.session.machine_id)
+    void this.unregisterFromUser(this.session.machine_id)
     this.session = null
   }
 
@@ -120,26 +129,28 @@ export class MachineDO implements DurableObject {
         if (msg.protocol_version !== PROTOCOL_VERSION) {
           console.warn('protocol mismatch from', msg.machine_id)
         }
-        void this.registerWithProjects(msg.projects_available, msg.machine_id)
+        void this.registerWithProjectsAndUser(msg.projects_available, msg.machine_id)
         return
       }
       case 'heartbeat': {
         if (this.session) this.session.last_heartbeat = msg.timestamp
+        void this.persistHeartbeat(msg.timestamp, msg.sessions_live)
         return
       }
       case 'session_registered':
       case 'session_terminated':
       case 'reply_tool_call':
       case 'permission_request': {
-        // All project-scoped messages forward to the matching ProjectDO.
-        const project_id =
-          msg.type === 'session_registered' || msg.type === 'session_terminated'
-            ? msg.project_id
-            : msg.project_id
+        const project_id = msg.project_id
         void this.forwardToProject(project_id, msg)
         return
       }
     }
+  }
+
+  private async persistHeartbeat(ts: number, sessions_live: SessionLiveSummary[]): Promise<void> {
+    await this.state.storage.put('last_heartbeat_ts', ts)
+    await this.state.storage.put('sessions_live', sessions_live)
   }
 
   private async forwardToProject(
@@ -164,8 +175,8 @@ export class MachineDO implements DurableObject {
     }
   }
 
-  private async registerWithProjects(projects: string[], machine_id: string): Promise<void> {
-    // Tell each ProjectDO who its machine is, and tell the registry.
+  private async registerWithProjectsAndUser(projects: string[], machine_id: string): Promise<void> {
+    // Pair each ProjectDO with this machine; UserDO holds the registry index.
     await Promise.all([
       ...projects.map((p) =>
         this.env.PROJECT_DO.get(this.env.PROJECT_DO.idFromName(p)).fetch('https://internal/_pair', {
@@ -174,36 +185,39 @@ export class MachineDO implements DurableObject {
           headers: { 'content-type': 'application/json' },
         }),
       ),
-      this.env.PROJECT_DO.get(this.env.PROJECT_DO.idFromName('__registry__')).fetch(
-        'https://internal/_registry/upsert',
-        {
-          method: 'POST',
-          body: JSON.stringify({ machine_id, projects }),
-          headers: { 'content-type': 'application/json' },
-        },
-      ),
-    ]).catch((err) => console.error('registerWithProjects failed', err))
+      this.userStub().fetch('https://internal/__machine/upsert', {
+        method: 'POST',
+        body: JSON.stringify({ machine_id, projects, connected_at: Date.now() }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    ]).catch((err) => console.error('registerWithProjectsAndUser failed', err))
   }
 
-  private async unregisterFromProjects(projects: string[], machine_id: string): Promise<void> {
-    await this.env.PROJECT_DO.get(this.env.PROJECT_DO.idFromName('__registry__'))
-      .fetch('https://internal/_registry/down', {
+  private async unregisterFromUser(machine_id: string): Promise<void> {
+    await this.userStub()
+      .fetch('https://internal/__machine/down', {
         method: 'POST',
         body: JSON.stringify({ machine_id }),
         headers: { 'content-type': 'application/json' },
       })
       .catch(() => {})
-    await Promise.all(
-      projects.map((p) =>
-        this.env.PROJECT_DO.get(this.env.PROJECT_DO.idFromName(p))
-          .fetch('https://internal/_unpair', {
-            method: 'POST',
-            body: JSON.stringify({ machine_id }),
-            headers: { 'content-type': 'application/json' },
-          })
-          .catch(() => {}),
-      ),
-    )
+    if (this.session) {
+      await Promise.all(
+        this.session.projects.map((p) =>
+          this.env.PROJECT_DO.get(this.env.PROJECT_DO.idFromName(p))
+            .fetch('https://internal/_unpair', {
+              method: 'POST',
+              body: JSON.stringify({ machine_id }),
+              headers: { 'content-type': 'application/json' },
+            })
+            .catch(() => {}),
+        ),
+      )
+    }
+  }
+
+  private userStub() {
+    return this.env.USER_DO.get(this.env.USER_DO.idFromName('__me__'))
   }
 
   private sendToBun(msg: WorkerToBun): boolean {

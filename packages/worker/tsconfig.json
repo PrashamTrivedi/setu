@@ -8,5 +8,5 @@
     "jsx": "react-jsx"
   },
   "include": ["src/**/*"],
-  "references": [{ "path": "../protocol" }]
+  "references": [{ "path": "../protocol" }, { "path": "../ui-protocol" }]
 }

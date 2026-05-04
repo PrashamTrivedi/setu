@@ -6,11 +6,7 @@ import type { DispatchKind, SessionRole } from './domain.ts'
 // `peer_message` is fanned out by the Worker when an agent calls the
 // `dispatch` reply tool with a `to_role`. The receiving session sees a normal
 // `<channel>` block with `from_role` so it can react in-loop.
-export type ChannelEventKind =
-  | 'card'
-  | 'input_response'
-  | 'cancel_advisory'
-  | 'peer_message'
+export type ChannelEventKind = 'card' | 'input_response' | 'cancel_advisory' | 'peer_message'
 
 export interface ChannelEvent {
   content: string
@@ -98,6 +94,12 @@ export type BunToWorker =
       tool_call_id: string
       tool_name: ReplyToolName
       args: unknown
+      /**
+       * Originating session role. Optional for backward compat with v2
+       * supervisors; v3+ supervisors set it so the Worker can attribute
+       * authored dispatches without guessing.
+       */
+      role?: SessionRole
     }
   | {
       type: 'permission_request'

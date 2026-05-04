@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/protocol" },
+    { "path": "./packages/ui-protocol" },
     { "path": "./packages/worker" },
     { "path": "./packages/bun-cli" },
     { "path": "./packages/channels/_runtime" },

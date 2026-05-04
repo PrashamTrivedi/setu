@@ -69,9 +69,7 @@ link.start()
 {
   const known = store.listProjects()
   if (known.length === 0) {
-    console.warn(
-      '[setu] no projects registered — add one with `setu project add <id> <path>`',
-    )
+    console.warn('[setu] no projects registered — add one with `setu project add <id> <path>`')
   } else {
     console.log(
       `[setu] ${known.length} project(s) registered: ${known.map((p) => p.project_id).join(', ')}`,
@@ -131,10 +129,54 @@ async function onWorkerMessage(msg: WorkerToBun): Promise<void> {
       return
     }
     case 'push_event': {
-      back.send(sessionKey(msg.project_id, msg.branch), {
-        type: 'channel_event',
-        event: msg.channel_event,
+      const key = sessionKey(msg.project_id, msg.branch)
+      if (back.has(key)) {
+        back.send(key, { type: 'channel_event', event: msg.channel_event })
+        return
+      }
+      // No live channel server — auto-respawn unless we already kicked off
+      // a respawn for this key in the last RESPAWN_COOLDOWN_MS. The cooldown
+      // catches the case where the user fires several messages in a row
+      // before Claude has booted; without it we'd spin up a tmux window per
+      // message.
+      if (recentRespawn(key)) {
+        waitAndDeliver(msg.project_id, msg.branch, msg.channel_event)
+        return
+      }
+      const role = msg.channel_event.meta.role
+      const projectPath = projectPathFor(msg.project_id, store)
+      if (!projectPath) {
+        console.error(`[setu] push_event for unknown project ${msg.project_id}`)
+        return
+      }
+      console.warn(
+        `[setu] no live channel for ${key} — respawning ${role} to deliver ${msg.channel_event.meta.event_kind}`,
+      )
+      const cwd =
+        role === 'kanban-ops'
+          ? projectPath
+          : await ensureWorktree(projectPath, msg.branch).catch(() => projectPath)
+      try {
+        registry.spawn({
+          project_id: msg.project_id,
+          project_path: projectPath,
+          branch: msg.branch,
+          role,
+          cwd,
+        })
+      } catch (err) {
+        const m = err instanceof Error ? err.message : String(err)
+        console.error(`[setu] respawn failed for ${key}: ${m}`)
+        return
+      }
+      markRespawn(key)
+      link.send({
+        type: 'session_registered',
+        project_id: msg.project_id,
+        branch: msg.branch,
+        role,
       })
+      waitAndDeliver(msg.project_id, msg.branch, msg.channel_event)
       return
     }
     case 'permission_verdict': {
@@ -158,6 +200,23 @@ async function onWorkerMessage(msg: WorkerToBun): Promise<void> {
       return
     }
   }
+}
+
+// Per-key cooldown so a burst of push_events after a supervisor restart
+// doesn't spawn a tmux window per message while the first Claude is booting.
+const RESPAWN_COOLDOWN_MS = 12_000
+const respawnAt = new Map<string, number>()
+function recentRespawn(key: string): boolean {
+  const at = respawnAt.get(key)
+  if (!at) return false
+  if (Date.now() - at > RESPAWN_COOLDOWN_MS) {
+    respawnAt.delete(key)
+    return false
+  }
+  return true
+}
+function markRespawn(key: string): void {
+  respawnAt.set(key, Date.now())
 }
 
 function waitAndDeliver(project_id: string, branch: string, event: ChannelEvent): void {
@@ -186,6 +245,9 @@ function onChannelMessage(key: string, msg: ChannelToBun): void {
   }
   switch (msg.type) {
     case 'reply_tool_call':
+      console.log(
+        `[setu] reply_tool_call ${msg.tool_name} from ${project_id}/${branch} (call=${msg.tool_call_id.slice(0, 8)})`,
+      )
       link.send({
         type: 'reply_tool_call',
         project_id,
@@ -196,6 +258,9 @@ function onChannelMessage(key: string, msg: ChannelToBun): void {
       })
       return
     case 'permission_request':
+      console.log(
+        `[setu] permission_request ${msg.tool_name} from ${project_id}/${branch} (req=${msg.request_id})`,
+      )
       link.send({
         type: 'permission_request',
         project_id,

@@ -1,8 +1,30 @@
 import type { BunToChannel, ChannelEvent, ChannelToBun, SessionRole } from '@kanban/protocol'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  NotificationSchema,
+} from '@modelcontextprotocol/sdk/types.js'
+import { z } from 'zod'
 import { connectBackChannel } from './back-channel-client.ts'
+
+/**
+ * MCP `setNotificationHandler` requires a Zod object schema with a `method`
+ * literal field. The earlier hand-rolled `{ method: '...' } as never` form
+ * compiled but crashed at runtime with `Schema is missing a method literal`
+ * inside the SDK's zod→jsonschema compat layer (zod-json-schema-compat.js).
+ */
+const PermissionRequestParamsSchema = z.object({
+  tool_name: z.string().optional(),
+  description: z.string().optional(),
+  input_preview: z.string().optional(),
+})
+
+const PermissionRequestNotificationSchema = NotificationSchema.extend({
+  method: z.literal('notifications/claude/channel/permission_request'),
+  params: PermissionRequestParamsSchema,
+})
 
 export interface ToolDefinition {
   name: string
@@ -86,6 +108,9 @@ function newRequestId(): string {
  */
 export async function runChannelServer(opts: ChannelServerOptions): Promise<void> {
   const ctx = readSpawnContext()
+  console.error(
+    `[${opts.serverName}] starting — pid=${process.pid} project=${ctx.project_id} branch=${ctx.branch} role=${ctx.role} socket=${ctx.socketPath}`,
+  )
   if (ctx.role !== opts.role) {
     throw new Error(
       `kanban channel server: role mismatch — env says ${ctx.role}, server expects ${opts.role}`,
@@ -105,13 +130,49 @@ export async function runChannelServer(opts: ChannelServerOptions): Promise<void
     },
   )
 
-  const back = await connectBackChannel({
-    socketPath: ctx.socketPath,
-    project_id: ctx.project_id,
-    branch: ctx.branch,
-    role: ctx.role,
-    onIncoming: (msg) => onBunMessage(msg),
-  })
+  // Start the back-channel connection in the background so a slow or absent
+  // UDS doesn't block the MCP stdio handshake. Outbound tool calls get
+  // buffered until the back-channel is live; this prevents a "MCP server is
+  // not yet connected" error in Claude when Bun is briefly unreachable.
+  const outbox: ChannelToBun[] = []
+  let liveSend: ((msg: ChannelToBun) => void) | null = null
+  const back = {
+    send(msg: ChannelToBun) {
+      if (liveSend) liveSend(msg)
+      else outbox.push(msg)
+    },
+  }
+  void (async () => {
+    let attempt = 0
+    while (true) {
+      try {
+        const conn = await connectBackChannel({
+          socketPath: ctx.socketPath,
+          project_id: ctx.project_id,
+          branch: ctx.branch,
+          role: ctx.role,
+          onIncoming: (msg) => onBunMessage(msg),
+        })
+        liveSend = conn.send
+        console.error(
+          `[${opts.serverName}] back-channel connected (socket=${ctx.socketPath}); flushing ${outbox.length} buffered`,
+        )
+        while (outbox.length > 0) {
+          const m = outbox.shift()
+          if (m) conn.send(m)
+        }
+        return // internal reconnect handles drops thereafter
+      } catch (err) {
+        attempt++
+        const m = err instanceof Error ? err.message : String(err)
+        const wait = Math.min(500 * 2 ** Math.min(attempt, 5), 10_000)
+        console.error(
+          `[${opts.serverName}] back-channel connect failed (attempt ${attempt}): ${m} — retrying in ${wait}ms`,
+        )
+        await new Promise((r) => setTimeout(r, wait))
+      }
+    }
+  })()
 
   function onBunMessage(msg: BunToChannel): void {
     if (msg.type === 'channel_event') {
@@ -162,21 +223,19 @@ export async function runChannelServer(opts: ChannelServerOptions): Promise<void
   // Permission relay (v1.5): Claude pings us with permission_request → we
   // forward to Bun → Worker UI surfaces it. Verdict comes back via
   // BunToChannel.permission_verdict above.
-  server.setNotificationHandler(
-    { method: 'notifications/claude/channel/permission_request' } as never,
-    async (notif: {
-      params?: { tool_name?: string; description?: string; input_preview?: string }
-    }) => {
-      const requestId = newRequestId()
-      back.send({
-        type: 'permission_request',
-        request_id: requestId,
-        tool_name: notif.params?.tool_name ?? 'unknown',
-        description: notif.params?.description ?? '',
-        input_preview: notif.params?.input_preview ?? '',
-      })
-    },
-  )
+  server.setNotificationHandler(PermissionRequestNotificationSchema, async (notif) => {
+    const params = notif.params as
+      | { tool_name?: string; description?: string; input_preview?: string }
+      | undefined
+    const requestId = newRequestId()
+    back.send({
+      type: 'permission_request',
+      request_id: requestId,
+      tool_name: params?.tool_name ?? 'unknown',
+      description: params?.description ?? '',
+      input_preview: params?.input_preview ?? '',
+    })
+  })
 
   const transport = new StdioServerTransport()
   await server.connect(transport)

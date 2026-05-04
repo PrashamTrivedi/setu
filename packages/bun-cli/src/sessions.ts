@@ -1,4 +1,5 @@
-import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,7 +11,10 @@ export interface SessionHandle {
   project_id: string
   branch: string
   role: SessionRole
-  proc: Subprocess
+  /** When running outside tmux, the in-process child handle. */
+  proc?: Subprocess
+  /** When running inside tmux, the window the Claude is hosted in. */
+  tmuxWindowId?: string
   cwd: string
   initial_event: ChannelEvent | null
   /** Per-session --mcp-config file; cleaned up on terminate. */
@@ -30,10 +34,36 @@ interface SpawnArgs {
   initial_event?: ChannelEvent
 }
 
-/** Absolute path to a channel server's source entry, relative to this file. */
+/**
+ * Absolute path to a channel server's source entry.
+ *
+ * Two resolution paths:
+ *   1. `SETU_CHANNEL_DIR` env var (set this when running the compiled binary,
+ *      because `import.meta.url` inside Bun's `--compile` output points into
+ *      the embedded VFS, not a real file on disk). Expected layout:
+ *        $SETU_CHANNEL_DIR/<role>/src/index.ts
+ *   2. Resolution from `import.meta.url` for dev / `bun link` mode where the
+ *      monorepo is on disk.
+ *
+ * Throws if the resolved path does not exist on disk — without this the user
+ * sees a confusing "kanban-work · ✘ failed" inside Claude with no Bun-side
+ * error.
+ */
 function channelEntryPath(role: SessionRole): string {
-  const here = dirname(fileURLToPath(import.meta.url))
-  return resolve(here, '..', '..', 'channels', role, 'src', 'index.ts')
+  const override = process.env.SETU_CHANNEL_DIR
+  const candidate = override
+    ? resolve(override, role, 'src', 'index.ts')
+    : (() => {
+        const here = dirname(fileURLToPath(import.meta.url))
+        return resolve(here, '..', '..', 'channels', role, 'src', 'index.ts')
+      })()
+  if (!existsSync(candidate)) {
+    const hint = override
+      ? `SETU_CHANNEL_DIR=${override} but ${candidate} doesn't exist`
+      : `derived ${candidate} not found — set SETU_CHANNEL_DIR to your repo's packages/channels (required when running the compiled \`setu\` binary)`
+    throw new Error(`channel server source missing for role=${role}: ${hint}`)
+  }
+  return candidate
 }
 
 /**
@@ -59,6 +89,25 @@ function writeMcpConfig(role: SessionRole, project_id: string, branch: string): 
   return path
 }
 
+function tmuxWindowName(role: SessionRole, project_id: string, branch: string): string {
+  const roleShort = role === 'kanban-ops' ? 'ops' : 'work'
+  // tmux truncates window names in the status line — keep it readable.
+  const name = `${roleShort}:${project_id}/${branch}`
+  return name.length > 60 ? `${name.slice(0, 57)}…` : name
+}
+
+function isHandleAlive(h: SessionHandle): boolean {
+  if (h.tmuxWindowId) {
+    // Verify the window still exists. If tmux command fails (no tmux on
+    // PATH, or the window was killed manually), treat as dead.
+    const r = spawnSync('tmux', ['list-windows', '-F', '#{window_id}'], { encoding: 'utf8' })
+    if (r.status !== 0) return false
+    const ids = (r.stdout ?? '').split(/\s+/).filter(Boolean)
+    return ids.includes(h.tmuxWindowId)
+  }
+  return !!h.proc && !h.proc.killed
+}
+
 export class SessionRegistry {
   private cfg: BunConfig
   private byKey = new Map<SessionKey, SessionHandle>()
@@ -82,10 +131,18 @@ export class SessionRegistry {
   spawn(args: SpawnArgs): SessionHandle {
     const key = sessionKey(args.project_id, args.branch)
     const existing = this.byKey.get(key)
-    if (existing && !existing.proc.killed) return existing
+    if (existing && isHandleAlive(existing)) {
+      // "Resume" semantics: if running in tmux, surface the live window so
+      // the user can see it. Outside tmux, the child still owns the
+      // supervisor's stdio (legacy behavior) — nothing to surface.
+      if (existing.tmuxWindowId) {
+        spawnSync('tmux', ['select-window', '-t', existing.tmuxWindowId])
+      }
+      return existing
+    }
+    if (existing) this.byKey.delete(key)
 
-    const env: Record<string, string> = {
-      ...(process.env as Record<string, string>),
+    const childEnv: Record<string, string> = {
       KANBAN_PROJECT_ID: args.project_id,
       KANBAN_BRANCH: args.branch,
       KANBAN_ROLE: args.role,
@@ -94,29 +151,28 @@ export class SessionRegistry {
 
     const mcpConfigPath = writeMcpConfig(args.role, args.project_id, args.branch)
 
-    // Claude Code with the channel loaded as a development plugin. The
-    // channel server is registered via per-session --mcp-config so it only
-    // exists for this one Claude process — no pollution of the user's
-    // ~/.claude.json, no role-mismatch crashes from the other role's server.
-    // The channel server's stdio is owned by Claude (per requirement §5.3.1);
-    // back-channel to Bun is via UDS.
-    const proc = Bun.spawn(
-      [
-        this.cfg.claudeBin,
-        '--mcp-config',
-        mcpConfigPath,
-        '--dangerously-load-development-channels',
-        `server:${args.role}`,
-      ],
-      {
-        cwd: args.cwd,
-        env,
-        stdin: 'inherit',
-        stdout: 'inherit',
-        stderr: 'inherit',
-      },
-    )
+    const claudeArgv = [
+      this.cfg.claudeBin,
+      '--mcp-config',
+      mcpConfigPath,
+      '--dangerously-load-development-channels',
+      `server:${args.role}`,
+    ]
 
+    if (this.cfg.tmux) {
+      const handle = this.spawnInTmux(args, claudeArgv, childEnv, mcpConfigPath)
+      this.byKey.set(key, handle)
+      return handle
+    }
+
+    // Non-tmux fallback — child inherits the supervisor's stdio.
+    const proc = Bun.spawn(claudeArgv, {
+      cwd: args.cwd,
+      env: { ...(process.env as Record<string, string>), ...childEnv },
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    })
     const handle: SessionHandle = {
       project_id: args.project_id,
       branch: args.branch,
@@ -136,13 +192,82 @@ export class SessionRegistry {
     return handle
   }
 
+  private spawnInTmux(
+    args: SpawnArgs,
+    claudeArgv: string[],
+    childEnv: Record<string, string>,
+    mcpConfigPath: string,
+  ): SessionHandle {
+    const winName = tmuxWindowName(args.role, args.project_id, args.branch)
+    const tmuxArgs = [
+      'new-window',
+      '-d', // create detached so the supervisor's window isn't switched away
+      '-P', // print info about the new window
+      '-F',
+      '#{window_id}',
+      '-n',
+      winName,
+      '-c',
+      args.cwd,
+    ]
+    // Forward the supervisor's PATH and a handful of other common vars so
+    // `claude` and `bun` (the MCP `command`) actually resolve in the new
+    // window. tmux's captured global env may not include ~/.bun/bin etc.
+    const inherit: Record<string, string | undefined> = {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      USER: process.env.USER,
+      LANG: process.env.LANG,
+      TERM: process.env.TERM,
+      SHELL: process.env.SHELL,
+      SETU_CHANNEL_DIR: process.env.SETU_CHANNEL_DIR,
+    }
+    const childMerged: Record<string, string> = {}
+    for (const [k, v] of Object.entries(inherit)) if (v != null) childMerged[k] = v
+    Object.assign(childMerged, childEnv)
+    for (const [k, v] of Object.entries(childMerged)) {
+      tmuxArgs.push('-e', `${k}=${v}`)
+    }
+    // Append the actual command. tmux runs it via the user's default shell.
+    tmuxArgs.push('--', ...claudeArgv)
+
+    const r = spawnSync('tmux', tmuxArgs, { encoding: 'utf8' })
+    if (r.status !== 0) {
+      const err = (r.stderr ?? '').trim() || `exit ${r.status}`
+      throw new Error(`tmux new-window failed: ${err}`)
+    }
+    const windowId = (r.stdout ?? '').trim()
+    if (!windowId) {
+      throw new Error('tmux new-window did not return a window id')
+    }
+    // Keep the window around if the command exits — the user needs to see
+    // crash output when Claude or the channel server fails to start.
+    spawnSync('tmux', ['set-window-option', '-t', windowId, 'remain-on-exit', 'on'])
+    console.log(
+      `[setu] spawned ${args.role} for ${args.project_id}/${args.branch} → tmux window ${windowId} (${winName})`,
+    )
+    return {
+      project_id: args.project_id,
+      branch: args.branch,
+      role: args.role,
+      tmuxWindowId: windowId,
+      cwd: args.cwd,
+      initial_event: args.initial_event ?? null,
+      mcpConfigPath,
+    }
+  }
+
   terminate(project_id: string, branch: string, signal: NodeJS.Signals = 'SIGTERM'): boolean {
     const key = sessionKey(project_id, branch)
     const h = this.byKey.get(key)
     if (!h) return false
-    try {
-      h.proc.kill(signal)
-    } catch {}
+    if (h.tmuxWindowId) {
+      spawnSync('tmux', ['kill-window', '-t', h.tmuxWindowId])
+    } else if (h.proc) {
+      try {
+        h.proc.kill(signal)
+      } catch {}
+    }
     try {
       unlinkSync(h.mcpConfigPath)
     } catch {}

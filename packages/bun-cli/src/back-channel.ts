@@ -123,6 +123,7 @@ export class BackChannelServer {
     }
     this.byKey.set(key, { socket: s, key, buf: '' })
     this.pending.delete(s)
+    console.log(`[setu] channel hello: ${key} role=${hello.role} pid=${hello.pid}`)
   }
 
   private removeSocket(s: Socket<undefined>): void {

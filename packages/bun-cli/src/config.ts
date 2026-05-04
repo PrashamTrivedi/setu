@@ -11,6 +11,12 @@ export interface BunConfig {
   socketPath: string
   /** Override for the local SQLite store. Empty = use defaultDbPath(). */
   dbPath?: string
+  /**
+   * Tmux info if the supervisor is running inside tmux. When present, child
+   * Claude sessions are launched into new tmux windows so they don't take
+   * over the supervisor's stdio.
+   */
+  tmux: TmuxInfo | null
 }
 
 export interface TmuxInfo {
@@ -85,10 +91,8 @@ export function loadConfig(opts: LoadConfigOptions = {}): BunConfig {
   const userSocketPath = env.KANBAN_SOCKET_PATH
 
   // Tmux scoping is applied only to defaults. Explicit env overrides win.
-  const machineId =
-    tmux && !userMachineId ? `${baseMachineId}-${tmux.key}` : baseMachineId
-  const socketPath =
-    userSocketPath ?? defaultSocketPath(tmux ? tmux.key : undefined)
+  const machineId = tmux && !userMachineId ? `${baseMachineId}-${tmux.key}` : baseMachineId
+  const socketPath = userSocketPath ?? defaultSocketPath(tmux ? tmux.key : undefined)
 
   if (tmux) {
     console.log(
@@ -105,5 +109,6 @@ export function loadConfig(opts: LoadConfigOptions = {}): BunConfig {
     claudeBin: env.CLAUDE_BIN ?? 'claude',
     socketPath,
     dbPath: env.KANBAN_DB_PATH,
+    tmux,
   }
 }

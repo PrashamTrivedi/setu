@@ -6,6 +6,7 @@
   "type": "module",
   "workspaces": [
     "packages/protocol",
+    "packages/ui-protocol",
     "packages/worker",
     "packages/bun-cli",
     "packages/channels/_runtime",

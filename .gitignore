@@ -44,3 +44,4 @@ bun-debug.log*
 
 # runtime sockets
 *.sock
+.playwright-cli/

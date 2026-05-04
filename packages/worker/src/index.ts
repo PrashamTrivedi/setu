@@ -5,55 +5,31 @@ import { indexHtml } from './ui.ts'
 
 export { ProjectDO } from './project-do.ts'
 export { MachineDO } from './machine-do.ts'
+export { UserDO } from './user-do.ts'
 
 const app = new Hono<{ Bindings: Env }>()
 
 // ─── UI ────────────────────────────────────────────────────────────────────
 app.get('/', (c) => c.html(indexHtml))
 
-// ─── Card CRUD + lifecycle (proxies to DO) ─────────────────────────────────
+// ─── Card CRUD + lifecycle (proxies to ProjectDO) ──────────────────────────
 app.all('/api/projects/:projectId/cards', forwardToProject('/cards'))
 app.all('/api/projects/:projectId/cards/:cardId/:action{approve|spawn|input}', (c) => {
   const { cardId, action } = c.req.param()
   return forwardToProject(`/cards/${cardId}/${action}`)(c)
 })
 
-// SSE tick every 3s so the client re-GETs /cards. Stateless.
-app.get('/api/projects/:projectId/stream', (c) => {
-  const stream = new ReadableStream({
-    start(controller) {
-      const enc = new TextEncoder()
-      const send = () => {
-        try {
-          controller.enqueue(enc.encode('data: tick\n\n'))
-        } catch {}
-      }
-      const t = setInterval(send, 3000)
-      send()
-      c.req.raw.signal.addEventListener('abort', () => {
-        clearInterval(t)
-        try {
-          controller.close()
-        } catch {}
-      })
-    },
-  })
-  return new Response(stream, {
-    headers: {
-      'content-type': 'text/event-stream',
-      'cache-control': 'no-store',
-      connection: 'keep-alive',
-    },
-  })
-})
-
-// ─── Registry: list known projects + machines ─────────────────────────────
-app.get('/api/projects', async (c) => {
-  const stub = projectStub(c.env, '__registry__')
-  return stub.fetch('https://internal/_registry/list')
+// ─── Registry: list known projects + machines (now via UserDO) ─────────────
+app.get('/api/projects', (c) => {
+  return userStub(c.env).fetch('https://internal/projects')
 })
 
 app.get('/api/projects/:projectId/status', forwardToProject('/status'))
+
+// ─── UI WebSocket (Phase 2) ───────────────────────────────────────────────
+app.get('/ws/ui', (c) => {
+  return userStub(c.env).fetch(rewritten(c.req.raw, '/__ws/ui'))
+})
 
 // ─── Bun supervisor WS endpoint (machine-keyed) ───────────────────────────
 app.get('/ws/bun/:machineId', async (c) => {
@@ -61,7 +37,6 @@ app.get('/ws/bun/:machineId', async (c) => {
   if (!machineId) return c.text('machine_id required', 400)
   const id = c.env.MACHINE_DO.idFromName(machineId)
   const stub = c.env.MACHINE_DO.get(id)
-  // Stash the machine_id in the DO so it knows its own name (for state.id is opaque)
   await stub
     .fetch('https://internal/__set_machine_id', {
       method: 'POST',
@@ -78,6 +53,11 @@ function projectStub(env: Env, projectId: string) {
   return env.PROJECT_DO.get(id)
 }
 
+function userStub(env: Env) {
+  const id = env.USER_DO.idFromName('__me__')
+  return env.USER_DO.get(id)
+}
+
 function forwardToProject(path: string) {
   return async (c: { req: { raw: Request; param: (k: string) => string }; env: Env }) => {
     const stub = projectStub(c.env, c.req.param('projectId'))
@@ -89,6 +69,12 @@ function forwardToProject(path: string) {
     }
     return stub.fetch(`https://internal${path}${url.search}`, init)
   }
+}
+
+/** Rewrite a request to a new internal path while keeping headers/method/body. */
+function rewritten(req: Request, path: string): Request {
+  const url = new URL(req.url)
+  return new Request(`https://internal${path}${url.search}`, req)
 }
 
 export default app

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadConfig, tmuxKeyFrom, type TmuxInfo } from './config.ts'
+import { type TmuxInfo, loadConfig, tmuxKeyFrom } from './config.ts'
 
 const KEYS = [
   'KANBAN_WORKER_WS',

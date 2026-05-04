@@ -16,6 +16,10 @@
       {
         "name": "MACHINE_DO",
         "class_name": "MachineDO"
+      },
+      {
+        "name": "USER_DO",
+        "class_name": "UserDO"
       }
     ]
   },
@@ -27,6 +31,10 @@
     {
       "tag": "v2",
       "new_sqlite_classes": ["MachineDO"]
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": ["UserDO"]
     }
   ],
   "vars": {
@@ -38,5 +46,5 @@
   }
   // Add when paired with a real machine:
   //   "kv_namespaces": [{ "binding": "AUTH", "id": "..." }]
-  //   secrets: BUN_SHARED_TOKEN
+  //   secrets: BUN_SHARED_TOKEN, UI_BEARER, VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, VAPID_SUBJECT
 }

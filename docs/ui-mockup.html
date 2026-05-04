@@ -3,17 +3,21 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>setu — dispatch feed mockup</title>
+<title>setu — chat pane mockup</title>
 <style>
   :root {
     --ink: #16140f;
     --paper: #f4ecdc;
     --paper-2: #ece2cc;
+    --paper-3: #e1d6bb;
     --rule: #2a2419;
     --muted: #6b6353;
-    --accent: #c8401d;       /* oxblood, used very sparingly */
+    --muted-2: #8a8273;
+    --accent: #c8401d;
     --accent-soft: #e9b394;
+    --accent-bg: #fbe8e0;
     --ok: #4d6b3a;
+    --warn: #b08a1a;
     --shadow: 0 1px 0 rgba(0,0,0,.06), 0 12px 40px rgba(0,0,0,.45);
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
     --serif: "Iowan Old Style", "Source Serif Pro", "Charter", Georgia, serif;
@@ -29,33 +33,119 @@
       #0c0a07;
     color: var(--paper);
     font-family: var(--mono);
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: 64px;
-    padding: 48px;
+    padding: 56px 32px;
   }
 
-  /* ─── side annotation columns ────────────────────────────── */
-  aside {
-    color: #8a8273;
-    font-size: 12px;
-    line-height: 1.6;
-    max-width: 280px;
-    justify-self: end;
+  .intro {
+    max-width: 920px;
+    margin: 0 auto 48px auto;
+    text-align: center;
   }
-  aside.right { justify-self: start; }
-  aside h2 {
+  .intro h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 40px;
+    letter-spacing: -.5px;
+    margin: 0 0 6px 0;
+  }
+  .intro h1 em { color: var(--accent); font-style: italic; font-weight: 400; }
+  .intro p {
+    color: #b5ad9b;
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .intro .legend {
+    margin-top: 18px;
+    display: inline-flex;
+    gap: 14px;
+    color: #8a8273;
+    font-size: 11px;
+    letter-spacing: .06em;
+  }
+  .intro .legend code {
+    font-family: var(--mono);
+    background: #1a160e;
+    border: 1px solid #3a342a;
+    color: #d6c89f;
+    padding: 1px 6px;
+    border-radius: 2px;
+  }
+
+  /* ─── multi-phone layout ─────────────────────────────────── */
+  .stage {
+    max-width: 1480px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 56px 64px;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    .stage { grid-template-columns: 1fr; }
+  }
+
+  .scene {
+    display: grid;
+    grid-template-columns: 390px 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+  .scene.flip { grid-template-columns: 1fr 390px; }
+  .scene.flip .copy { order: 0; text-align: right; }
+  .scene.flip .copy aside { justify-self: end; }
+
+  .copy {
+    padding-top: 32px;
+  }
+  .copy .num {
     font-family: var(--serif);
     font-style: italic;
-    font-weight: 500;
-    color: var(--paper);
-    font-size: 18px;
-    letter-spacing: .2px;
-    margin: 0 0 8px 0;
+    font-size: 38px;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 6px;
   }
-  aside p { margin: 0 0 16px 0; }
-  aside .tag {
+  .copy h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--paper);
+    margin: 0 0 8px 0;
+    letter-spacing: -.2px;
+  }
+  .copy p {
+    color: #b5ad9b;
+    font-size: 12.5px;
+    line-height: 1.6;
+    margin: 0 0 12px 0;
+    max-width: 360px;
+  }
+  .copy ul {
+    margin: 0 0 12px 0;
+    padding: 0;
+    list-style: none;
+  }
+  .copy ul li {
+    color: #b5ad9b;
+    font-size: 11.5px;
+    line-height: 1.6;
+    padding: 4px 0;
+    border-top: 1px dashed #3a342a;
+  }
+  .copy ul li:first-child { border-top: none; }
+  .copy ul li b { color: var(--paper); font-weight: 600; }
+  .copy code {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #d6c89f;
+    background: #1a160e;
+    border: 1px solid #3a342a;
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+  .copy .tag {
     display: inline-block;
     border: 1px solid #3a342a;
     padding: 2px 8px;
@@ -66,60 +156,12 @@
     text-transform: uppercase;
     margin-right: 4px;
   }
-  aside hr {
-    border: none;
-    border-top: 1px dashed #3a342a;
-    margin: 20px 0;
-  }
-  aside code {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: #d6c89f;
-    background: #1a160e;
-    border: 1px solid #3a342a;
-    padding: 1px 5px;
-    border-radius: 2px;
-  }
-  aside .gap {
-    border-color: var(--accent);
-    color: var(--accent-soft);
-  }
-
-  /* in-card protocol footer: tells you what message type backs this card */
-  .proto {
-    margin-top: 10px;
-    padding-top: 8px;
-    border-top: 1px dotted #c5bba2;
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: .04em;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .proto code {
-    background: var(--paper-2);
-    border: 1px solid #d2c8b1;
-    padding: 1px 5px;
-    border-radius: 2px;
-    color: var(--ink);
-  }
-  .proto .gap {
-    color: var(--accent);
-    border-color: var(--accent);
-  }
-  .proto .gap code {
-    color: var(--accent);
-    border-color: var(--accent);
-    background: #fbe8e0;
-  }
+  .copy .tag.gap { border-color: var(--accent); color: var(--accent-soft); }
 
   /* ─── phone frame ────────────────────────────────────────── */
   .phone {
     width: 390px;
-    height: 844px;
+    height: 760px;
     background: var(--paper);
     color: var(--ink);
     border-radius: 44px;
@@ -139,41 +181,95 @@
     border-radius: 0 0 18px 18px;
     z-index: 5;
   }
-
-  /* ─── status / chrome ────────────────────────────────────── */
   .status {
-    height: 44px;
+    height: 40px;
     flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 28px;
-    font-family: var(--mono);
     font-size: 12px;
     color: var(--ink);
     font-variant-numeric: tabular-nums;
   }
 
-  /* ─── masthead ───────────────────────────────────────────── */
-  header.masthead {
+  /* ─── shared header ──────────────────────────────────────── */
+  .topbar {
     flex: 0 0 auto;
-    padding: 6px 22px 12px 22px;
+    padding: 4px 18px 12px 18px;
     border-bottom: 1px solid var(--rule);
     background: var(--paper);
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
-  .masthead .row { display: flex; align-items: baseline; justify-content: space-between; }
-  .masthead h1 {
+  .topbar .back {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    color: var(--ink);
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .topbar .title {
     font-family: var(--serif);
+    font-size: 17px;
     font-weight: 600;
-    font-size: 30px;
-    letter-spacing: -0.5px;
-    margin: 0;
+    line-height: 1.1;
+    flex: 1 1 auto;
   }
-  .masthead h1 em {
+  .topbar .title small {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-weight: 400;
+    margin-top: 1px;
+  }
+  .topbar .title em {
     font-style: italic;
     font-weight: 400;
     color: var(--accent);
   }
+  .topbar .icon-btn {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--ink);
+    background: transparent;
+    cursor: pointer;
+    display: grid; place-items: center;
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--ink);
+  }
+  .topbar .badge {
+    position: absolute;
+    transform: translate(8px,-10px);
+    background: var(--accent);
+    color: var(--paper);
+    font-size: 9px;
+    font-family: var(--mono);
+    border-radius: 999px;
+    padding: 1px 5px;
+    pointer-events: none;
+  }
+
+  /* ─── home / chats list ──────────────────────────────────── */
+  .masthead {
+    flex: 0 0 auto;
+    padding: 8px 22px 10px 22px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+  }
+  .masthead h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 28px;
+    margin: 0;
+    letter-spacing: -.4px;
+  }
+  .masthead h1 em { font-style: italic; font-weight: 400; color: var(--accent); }
   .masthead .meta {
     font-size: 10px;
     letter-spacing: .14em;
@@ -181,137 +277,313 @@
     color: var(--muted);
     margin-top: 2px;
   }
-  .fleet {
-    margin-top: 10px;
+  .filterbar {
     display: flex;
-    gap: 14px;
-    font-size: 11px;
+    gap: 6px;
+    padding: 10px 18px 6px 18px;
+    flex-wrap: wrap;
+  }
+  .pill {
+    font-family: var(--mono);
+    font-size: 10.5px;
     color: var(--muted);
+    background: transparent;
+    border: 1px solid #c5bba2;
+    padding: 4px 9px;
+    border-radius: 999px;
+    cursor: pointer;
+    letter-spacing: .04em;
   }
-  .fleet .dot {
-    display: inline-block; width: 6px; height: 6px;
-    background: var(--ok); border-radius: 50%;
-    margin-right: 5px; vertical-align: 1px;
+  .pill.active { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+  .pill .count {
+    font-family: var(--mono);
+    color: inherit;
+    opacity: .6;
+    margin-left: 4px;
   }
-  .fleet .dot.warn { background: var(--accent); }
-  .fleet .dot.idle { background: #b5ad9b; }
 
-  /* ─── feed scroll ────────────────────────────────────────── */
-  .feed {
+  .chats {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 0 18px 24px 18px;
+    padding: 0 8px 100px 8px;
   }
-
-  /* ─── decision strip ─────────────────────────────────────── */
-  .decision {
-    margin: 14px 0 6px 0;
-    background: #fff;
-    border: 1px solid var(--rule);
-    border-left: 4px solid var(--accent);
-    padding: 14px 14px 10px 14px;
-    border-radius: 4px;
-    box-shadow: 0 1px 0 rgba(0,0,0,.04);
-  }
-  .decision .label {
-    font-size: 9px;
-    letter-spacing: .18em;
-    text-transform: uppercase;
-    color: var(--accent);
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-  .decision .what {
-    font-family: var(--serif);
-    font-size: 16px;
-    line-height: 1.35;
-    margin: 0 0 4px 0;
-  }
-  .decision .what strong { font-weight: 700; }
-  .decision .ctx {
-    font-size: 11px;
-    color: var(--muted);
-    margin: 0 0 10px 0;
-    line-height: 1.5;
-  }
-  .decision .actions {
-    display: flex; gap: 8px; align-items: center;
-  }
-  .btn {
-    border: none;
-    cursor: pointer;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: .04em;
-    padding: 9px 14px;
-    border-radius: 3px;
-    color: var(--paper);
-  }
-  .btn.allow { background: var(--ink); }
-  .btn.deny  { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
-  .btn.ghost { background: transparent; color: var(--muted); border: 1px dashed #b5ad9b; }
-  .kbd {
-    margin-left: auto;
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: .12em;
-  }
-  .kbd b {
-    font-weight: 600;
-    color: var(--ink);
-    background: var(--paper-2);
-    padding: 1px 5px;
-    border-radius: 2px;
-    border: 1px solid #d2c8b1;
-  }
-
-  /* ─── dispatch cards ─────────────────────────────────────── */
-  .dispatch {
-    padding: 16px 4px 14px 4px;
+  .chat-row {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    gap: 10px;
+    align-items: start;
+    padding: 12px 12px;
     border-bottom: 1px solid #d8cfb8;
+    cursor: pointer;
     position: relative;
   }
-  .dispatch:last-child { border-bottom: none; }
-  .byline {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 10px;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 8px;
-  }
-  .sigil {
-    width: 18px; height: 18px;
+  .chat-row.flag { background: #fff8e9; }
+  .chat-row .sigil {
+    width: 32px; height: 32px;
     border: 1px solid var(--ink);
-    display: inline-grid;
-    place-items: center;
+    display: grid; place-items: center;
     font-family: var(--serif);
     font-style: italic;
     font-weight: 600;
-    font-size: 11px;
+    font-size: 14px;
     color: var(--ink);
     background: var(--paper);
+    margin-top: 2px;
   }
-  .sigil.work  { border-radius: 50%; }
-  .sigil.ops   { border-radius: 0; }
-  .sigil.ops::after { content: ""; position: absolute; }
-  .byline .name { font-weight: 700; color: var(--ink); letter-spacing: .14em; }
-  .byline .ts { margin-left: auto; font-variant-numeric: tabular-nums; }
-
-  .body {
+  .chat-row .sigil.work { border-radius: 50%; }
+  .chat-row .sigil.ops { border-radius: 0; }
+  .chat-row .head {
+    display: flex; align-items: baseline; gap: 6px;
+    font-size: 11.5px;
+    color: var(--ink);
+  }
+  .chat-row .head b { font-weight: 700; letter-spacing: .04em; }
+  .chat-row .head .branch { color: var(--muted); }
+  .chat-row .preview {
     font-family: var(--serif);
-    font-size: 15.5px;
+    font-size: 13.5px;
+    line-height: 1.4;
+    color: var(--ink);
+    margin-top: 2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .chat-row .preview em { color: var(--muted); }
+  .chat-row .meta {
+    text-align: right;
+    color: var(--muted);
+    font-size: 10px;
     line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  .chat-row .meta .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-left: 4px;
+    vertical-align: 1px;
+  }
+  .chat-row .meta .dot.warn { background: var(--accent); }
+  .chat-row .meta .dot.ok { background: var(--ok); }
+  .chat-row .meta .dot.idle { background: #b5ad9b; }
+  .chat-row .meta .flag {
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 11px;
+  }
+
+  /* section header in chats */
+  .section-h {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 14px 14px 4px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .section-h .add-link {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .04em;
+    color: var(--accent);
+    text-transform: none;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  /* fleet strip in home */
+  .fleet-strip {
+    display: flex;
+    gap: 8px;
+    padding: 8px 14px 10px 14px;
+    overflow-x: auto;
+    border-bottom: 1px solid #d8cfb8;
+    background: var(--paper-2);
+  }
+  .fleet-card {
+    flex: 0 0 auto;
+    border: 1px solid #c5bba2;
+    background: var(--paper);
+    border-radius: 4px;
+    padding: 6px 10px;
+    min-width: 130px;
+    cursor: pointer;
+  }
+  .fleet-card .machine {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink);
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+  .fleet-card .sub {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .fleet-card .sub .dot {
+    display: inline-block; width: 5px; height: 5px;
+    background: var(--ok); border-radius: 50%;
+    margin-right: 4px; vertical-align: 1px;
+  }
+  .fleet-card.add {
+    border: 1px dashed #b5ad9b;
+    color: var(--muted);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-style: italic;
+    font-size: 12.5px;
+  }
+
+  /* fab */
+  .fab {
+    position: absolute;
+    bottom: 86px; right: 22px;
+    width: 56px; height: 56px;
+    border-radius: 28px;
+    background: var(--ink);
+    color: var(--paper);
+    display: grid; place-items: center;
+    font-family: var(--serif);
+    font-size: 28px;
+    line-height: 1;
+    box-shadow: 0 6px 22px rgba(0,0,0,.5);
+    cursor: pointer;
+    border: none;
+    z-index: 4;
+  }
+  .fab .label {
+    position: absolute;
+    right: 64px; top: 50%; transform: translateY(-50%);
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .06em;
+    padding: 6px 10px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  /* tabbar */
+  .tabbar {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--rule);
+    background: var(--paper-2);
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 0 18px 0;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: .04em;
+  }
+  .tabbar .tab {
+    text-align: center;
+    cursor: pointer;
+    line-height: 1.4;
+  }
+  .tabbar .tab .gly {
+    font-family: var(--serif);
+    font-size: 14px;
+    display: block;
+    color: var(--muted);
+  }
+  .tabbar .tab.active { color: var(--ink); font-weight: 700; }
+  .tabbar .tab.active .gly { color: var(--ink); }
+
+  /* ─── chat pane ──────────────────────────────────────────── */
+  .thread {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 14px 16px 16px 16px;
+    background:
+      linear-gradient(var(--paper), var(--paper));
+  }
+  .day {
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 6px 0 14px 0;
+  }
+  .day::before, .day::after {
+    content: " — ";
+    color: #c5bba2;
+  }
+
+  /* dispatch bubbles (agent) */
+  .bubble {
+    max-width: 86%;
+    margin: 0 auto 14px 0;
+    background: #fff;
+    border: 1px solid #d2c8b1;
+    border-radius: 4px 14px 14px 14px;
+    padding: 10px 12px 8px 12px;
+    box-shadow: 0 1px 0 rgba(0,0,0,.03);
+    position: relative;
+  }
+  .bubble.committing {
+    border-left: 3px solid var(--accent);
+    background: #fffaf3;
+  }
+  .bubble.peer {
+    background: #fff7e9;
+    border-color: #e8d8a8;
+  }
+  .bubble.tool {
+    background: #f0ebda;
+    border-color: #c5bba2;
+    border-style: dashed;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .bubble .byline {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .bubble .byline b { color: var(--ink); font-weight: 700; }
+  .bubble .byline .ts { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .bubble .byline .crossed-tag {
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 0 5px;
+    border-radius: 2px;
+    font-size: 9px;
+  }
+  .bubble .body {
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.45;
     color: var(--ink);
     margin: 0;
   }
-  .body em { color: var(--muted); }
-
-  .affordances {
-    margin-top: 10px;
+  .bubble .body em { color: var(--muted); }
+  .bubble .body code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--paper-2);
+    border: 1px solid #d2c8b1;
+    padding: 0 4px;
+    border-radius: 2px;
+  }
+  .bubble .actions {
     display: flex; gap: 6px; flex-wrap: wrap;
+    margin-top: 8px;
   }
   .chip {
     font-family: var(--mono);
@@ -319,307 +591,1068 @@
     color: var(--muted);
     border: 1px solid #c5bba2;
     background: transparent;
-    padding: 4px 9px;
+    padding: 3px 9px;
     border-radius: 999px;
     cursor: pointer;
     letter-spacing: .04em;
   }
-  .chip:hover { border-color: var(--ink); color: var(--ink); }
   .chip.primary { color: var(--ink); border-color: var(--ink); }
-
-  /* cross-agent dispatch — visual marker */
-  .dispatch.crossed::before {
-    content: "";
-    position: absolute;
-    left: -8px; top: 18px;
-    width: 4px; height: 36px;
-    background: var(--accent);
-    border-radius: 2px;
-  }
-  .crossed-tag {
-    display: inline-block;
+  .chip.danger { color: var(--accent); border-color: var(--accent); }
+  .commit-line {
     font-family: var(--mono);
     font-size: 10px;
     color: var(--accent);
-    border: 1px solid var(--accent);
-    padding: 1px 6px;
-    border-radius: 2px;
-    margin-left: 6px;
-    letter-spacing: .06em;
-  }
-
-  /* digest card */
-  .digest {
-    margin: 16px 0;
-    background: #fff8e9;
-    border: 1px dashed #b09666;
-    padding: 12px 14px;
-    border-radius: 3px;
-  }
-  .digest .label {
-    font-size: 9px; letter-spacing: .18em; text-transform: uppercase;
-    color: #8b6f3a; font-weight: 700; margin-bottom: 6px;
-  }
-  .digest ul {
-    font-family: var(--serif);
-    font-size: 13.5px;
-    line-height: 1.5;
-    margin: 0; padding-left: 18px; color: var(--ink);
-  }
-  .digest ul li { margin-bottom: 2px; }
-  .digest .footer {
-    font-size: 10.5px;
-    color: var(--muted);
-    margin-top: 8px;
-    display: flex; justify-content: space-between;
-  }
-
-  /* redirect inline reply */
-  .redirect {
-    margin-top: 10px;
-    border: 1px solid #b5ad9b;
-    background: #fffcf3;
-    border-radius: 3px;
-    padding: 8px 10px;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--muted);
-  }
-  .redirect b { color: var(--ink); font-weight: 600; }
-  .redirect .input {
     margin-top: 6px;
-    border-top: 1px dashed #d2c8b1;
-    padding-top: 8px;
-    color: var(--ink);
+    letter-spacing: .04em;
+  }
+
+  /* user redirect bubble (right aligned) */
+  .me {
+    max-width: 78%;
+    margin: 0 0 14px auto;
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 14px 4px 14px 14px;
+    padding: 9px 12px;
     font-family: var(--serif);
     font-size: 14px;
+    line-height: 1.4;
   }
-  .redirect .input::after {
+  .me .ts {
+    display: block;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: #b5ad9b;
+    letter-spacing: .1em;
+    margin-top: 4px;
+    text-align: right;
+  }
+
+  /* inline decision strip */
+  .decision {
+    margin: 0 0 14px 0;
+    background: #fff;
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent);
+    padding: 12px 12px 10px 12px;
+    border-radius: 4px;
+  }
+  .decision .label {
+    font-size: 9px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .decision .what {
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.35;
+    margin: 0 0 4px 0;
+  }
+  .decision .ctx {
+    font-size: 10.5px;
+    color: var(--muted);
+    margin: 0 0 8px 0;
+    line-height: 1.5;
+  }
+  .decision .row { display: flex; gap: 6px; align-items: center; }
+  .btn {
+    border: none;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .04em;
+    padding: 7px 12px;
+    border-radius: 3px;
+    color: var(--paper);
+  }
+  .btn.allow { background: var(--ink); }
+  .btn.deny  { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+  .btn.ghost { background: transparent; color: var(--muted); border: 1px dashed #b5ad9b; }
+  .btn.primary { background: var(--accent); }
+
+  /* composer */
+  .composer {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--rule);
+    background: var(--paper-2);
+    padding: 10px 14px 16px 14px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .composer .field {
+    flex: 1 1 auto;
+    background: var(--paper);
+    border: 1px solid #c5bba2;
+    border-radius: 18px;
+    padding: 9px 12px;
+    font-family: var(--serif);
+    font-size: 14px;
+    color: var(--ink);
+    min-height: 36px;
+    line-height: 1.4;
+  }
+  .composer .field .ph { color: var(--muted); }
+  .composer .field .cur::after {
     content: "▍";
     color: var(--accent);
     margin-left: 1px;
     animation: blink 1.1s infinite;
   }
   @keyframes blink { 50% { opacity: 0; } }
-
-  /* ─── footer rail ────────────────────────────────────────── */
-  .rail {
+  .composer .send {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: none;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--serif);
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .composer .send.disabled { background: #c5bba2; }
+  .composer-aux {
     flex: 0 0 auto;
-    border-top: 1px solid var(--rule);
-    background: var(--paper-2);
     display: flex;
-    justify-content: space-between;
-    padding: 10px 22px 18px 22px;
-    font-size: 11px;
+    gap: 6px;
+    padding: 0 14px 6px 14px;
+    background: var(--paper-2);
+  }
+  .composer-aux .chip { background: var(--paper); }
+
+  /* ─── sheet (modal) ──────────────────────────────────────── */
+  .sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(10,8,5,.35);
+    z-index: 6;
+  }
+  .sheet {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    background: var(--paper);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -10px 40px rgba(0,0,0,.4);
+    z-index: 7;
+    padding: 8px 18px 22px 18px;
+    max-height: 76%;
+    display: flex;
+    flex-direction: column;
+  }
+  .sheet .grip {
+    width: 44px; height: 4px;
+    background: #c5bba2;
+    border-radius: 2px;
+    margin: 6px auto 14px auto;
+  }
+  .sheet h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 20px;
+    margin: 0 0 4px 0;
+  }
+  .sheet h3 em { color: var(--accent); font-style: italic; font-weight: 400; }
+  .sheet .lede {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin: 0 0 14px 0;
+    line-height: 1.5;
+  }
+  .field-label {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--muted);
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    margin: 14px 0 6px 0;
+  }
+  .field-label .hint {
+    text-transform: none;
+    letter-spacing: .04em;
+    color: var(--muted-2);
+    font-size: 10px;
+    margin-left: 6px;
+  }
+  .picker {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .picker .opt {
+    flex: 0 0 auto;
+    border: 1px solid #c5bba2;
+    background: var(--paper);
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    min-width: 130px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink);
+  }
+  .picker .opt b { display: block; font-weight: 700; letter-spacing: .04em; }
+  .picker .opt small {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-weight: 400;
+  }
+  .picker .opt.active {
+    border-color: var(--ink);
+    background: var(--paper-2);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .picker .opt.add {
+    border-style: dashed;
+    color: var(--accent);
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .prompt-area {
+    background: #fff;
+    border: 1px solid #c5bba2;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--ink);
+    min-height: 84px;
+  }
+  .prompt-area .ph { color: var(--muted); }
+  .prompt-area .cur::after {
+    content: "▍";
+    color: var(--accent);
+    animation: blink 1.1s infinite;
+  }
+  .start-row {
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .start-row .btn-big {
+    flex: 1 1 auto;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: 4px;
+    padding: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: .06em;
+    cursor: pointer;
+  }
+  .start-row .hint {
+    font-size: 10px;
     color: var(--muted);
     letter-spacing: .04em;
   }
-  .rail .modes {
-    display: flex; gap: 14px;
+
+  /* ─── add machine / add repo screens ─────────────────────── */
+  .form {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 16px 20px 20px 20px;
   }
-  .rail .modes span.active { color: var(--ink); font-weight: 700; }
+  .form h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 22px;
+    margin: 0 0 4px 0;
+    letter-spacing: -.2px;
+  }
+  .form h3 em { font-style: italic; color: var(--accent); font-weight: 400; }
+  .form .lede {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.55;
+    margin: 0 0 16px 0;
+  }
+  .step {
+    border-top: 1px dashed #c5bba2;
+    padding: 14px 0 4px 0;
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 12px;
+  }
+  .step .n {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 12px;
+    display: grid; place-items: center;
+    margin-top: 1px;
+  }
+  .step .what {
+    font-family: var(--serif);
+    font-size: 14.5px;
+    line-height: 1.45;
+    color: var(--ink);
+    margin: 0 0 6px 0;
+  }
+  .step .what em { color: var(--muted); }
+  .codeblock {
+    background: #1a160e;
+    color: #f4ecdc;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    overflow-x: auto;
+    position: relative;
+    margin: 6px 0 4px 0;
+  }
+  .codeblock .copy-btn {
+    position: absolute;
+    top: 6px; right: 6px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: .12em;
+    background: transparent;
+    border: 1px solid #5a4f38;
+    color: #d6c89f;
+    padding: 2px 6px;
+    border-radius: 2px;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+  .codeblock .c1 { color: #d6c89f; }      /* command name */
+  .codeblock .c2 { color: var(--accent-soft); } /* args */
+  .codeblock .c3 { color: #8a8273; }      /* comment */
 
-  /* ─── feed scrollbar polish ──────────────────────────────── */
-  .feed::-webkit-scrollbar { width: 6px; }
-  .feed::-webkit-scrollbar-thumb { background: #c5bba2; border-radius: 3px; }
-  .feed::-webkit-scrollbar-track { background: transparent; }
-
-  /* tiny line-rule between sections */
-  .rule {
+  .pair-card {
+    border: 1px solid var(--rule);
+    background: #fff8e9;
+    border-radius: 6px;
+    padding: 14px 14px 12px 14px;
+    margin-top: 10px;
     text-align: center;
+  }
+  .pair-card .pin {
+    font-family: var(--mono);
+    font-size: 30px;
+    letter-spacing: .3em;
+    color: var(--ink);
+    font-weight: 700;
+    padding: 6px 0;
+  }
+  .pair-card .pin-hint {
+    font-size: 10.5px;
+    color: var(--muted);
+    letter-spacing: .04em;
+  }
+  .pair-card .timer {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    margin-top: 6px;
+    letter-spacing: .06em;
+  }
+
+  .listing {
+    border: 1px solid #c5bba2;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .listing .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-top: 1px solid #d8cfb8;
+    background: var(--paper);
+  }
+  .listing .row:first-child { border-top: none; }
+  .listing .row.ok { background: #f4f0e2; }
+  .listing .row .glyph {
+    width: 22px; height: 22px;
+    border-radius: 4px;
+    border: 1px solid var(--ink);
+    display: grid; place-items: center;
+    font-family: var(--serif);
+    font-size: 12px;
+  }
+  .listing .row .glyph.ok { background: var(--ok); color: #f4ecdc; border-color: var(--ok); }
+  .listing .row .name {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: .04em;
+  }
+  .listing .row .path {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .listing .row .col { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+  .listing .row .meta-r {
+    font-size: 10px;
+    color: var(--muted);
+    text-align: right;
+    letter-spacing: .04em;
+  }
+
+  .footnote {
+    font-size: 10.5px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px dashed #c5bba2;
+  }
+  .footnote code { font-family: var(--mono); background: var(--paper-2); border: 1px solid #d2c8b1; padding: 0 4px; border-radius: 2px; }
+
+  .proto {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dotted #c5bba2;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: var(--muted);
+    letter-spacing: .04em;
+    line-height: 1.6;
+  }
+  .proto code {
+    background: var(--paper-2);
+    border: 1px solid #d2c8b1;
+    padding: 0 4px;
+    border-radius: 2px;
+    color: var(--ink);
+  }
+
+  /* ─── footer block ───────────────────────────────────────── */
+  .footer {
+    max-width: 1240px;
+    margin: 64px auto 0 auto;
+    padding: 28px 32px;
+    border-top: 1px dashed #3a342a;
+    color: #8a8273;
+    font-size: 12px;
+    line-height: 1.6;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 32px;
+  }
+  @media (max-width: 1100px) { .footer { grid-template-columns: 1fr; } }
+  .footer h3 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 16px;
+    color: var(--paper);
+    margin: 0 0 10px 0;
+  }
+  .footer code {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #d6c89f;
+    background: #1a160e;
+    border: 1px solid #3a342a;
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+  .footer .tag {
+    display: inline-block;
+    border: 1px solid #3a342a;
+    padding: 2px 8px;
+    border-radius: 999px;
     color: #b5ad9b;
     font-size: 10px;
-    margin: 12px 0 4px 0;
-    letter-spacing: .3em;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-right: 4px;
   }
+  .footer .tag.gap { border-color: var(--accent); color: var(--accent-soft); }
 </style>
 </head>
 <body>
-  <aside>
-    <h2>The reframe</h2>
-    <p>This isn't chat. Agents <em>author</em> short dispatches when they decide something or need you. You're the editor-in-chief, not a participant.</p>
-    <hr/>
-    <p><span class="tag">pinned</span> Decision-required floats to the top until you act.</p>
-    <p><span class="tag">silent ok</span> Nothing to say = nothing posted. The feed isn't a log.</p>
-    <p><span class="tag">cross</span> Agents address each other in public; you lurk &amp; intervene.</p>
-    <p><span class="tag">digest</span> Quiet hours batch the rest into one card.</p>
-  </aside>
 
-  <div class="phone" role="application" aria-label="setu dispatch feed">
-    <div class="notch"></div>
+<div class="intro">
+  <h1>setu <em>·</em> chat-pane mockup</h1>
+  <p>Each card is now a chat thread you can reopen and steer. Agents author dispatches inside the thread; you redirect inline. The home screen is a roster of threads, with first-class flows for adding machines and repositories.</p>
+  <div class="legend">
+    <span><code>•</code> agent dispatch</span>
+    <span><code>▲</code> decision required</span>
+    <span><code>↔</code> peer message</span>
+    <span><code>+</code> compose</span>
+  </div>
+</div>
 
-    <div class="status">
-      <span>9:41</span>
-      <span style="letter-spacing:.16em;">●●● 5G</span>
+<div class="stage">
+
+  <!-- ╔══════════════════════════════════════════════════════╗ -->
+  <!-- ║ 1. CHATS HOME                                         ║ -->
+  <!-- ╚══════════════════════════════════════════════════════╝ -->
+  <div class="scene">
+    <div class="phone" aria-label="Home — chats list">
+      <div class="notch"></div>
+      <div class="status"><span>9:41</span><span style="letter-spacing:.16em;">●●● 5G</span></div>
+
+      <header class="masthead">
+        <h1>setu <em>·</em> chats</h1>
+        <div class="meta">May 4 · 2 machines · 4 threads · 1 needs you</div>
+      </header>
+
+      <!-- fleet (machines) strip -->
+      <div class="fleet-strip" aria-label="paired machines">
+        <div class="fleet-card">
+          <div class="machine">⌂ tower</div>
+          <div class="sub"><span class="dot"></span>2 sessions · 2 repos</div>
+        </div>
+        <div class="fleet-card">
+          <div class="machine">⌂ macbook</div>
+          <div class="sub"><span class="dot"></span>1 session · 1 repo</div>
+        </div>
+        <div class="fleet-card add">+ pair machine</div>
+      </div>
+
+      <div class="filterbar">
+        <button class="pill active">all <span class="count">4</span></button>
+        <button class="pill">flagged <span class="count">1</span></button>
+        <button class="pill">live <span class="count">3</span></button>
+        <button class="pill">quiet</button>
+      </div>
+
+      <div class="chats">
+        <div class="section-h">
+          <span>needs you</span>
+        </div>
+
+        <div class="chat-row flag">
+          <div class="sigil work">w</div>
+          <div>
+            <div class="head">
+              <b>kanban-work</b><span class="branch">· payments-refund</span>
+            </div>
+            <p class="preview">▲ wants to run <em>prisma migrate deploy</em> against staging — schema change in commit b8f2 needs to land first.</p>
+          </div>
+          <div class="meta">
+            2m<br/>
+            <span class="flag">▲</span><span class="dot warn"></span>
+          </div>
+        </div>
+
+        <div class="section-h">
+          <span>live · tower</span>
+        </div>
+
+        <div class="chat-row">
+          <div class="sigil work">w</div>
+          <div>
+            <div class="head">
+              <b>kanban-work</b><span class="branch">· settings-revamp</span>
+            </div>
+            <p class="preview">Tried two approaches for the org-switching dropdown. Going with <em>inline popover</em> unless you tell me otherwise in the next hour.</p>
+          </div>
+          <div class="meta">11m<br/><span class="dot ok"></span></div>
+        </div>
+
+        <div class="chat-row">
+          <div class="sigil ops">o</div>
+          <div>
+            <div class="head">
+              <b>kanban-ops</b><span class="branch">· main</span>
+            </div>
+            <p class="preview">↔ to <em>kanban-work</em>: rotating staging DB credentials at 14:00. You'll see one reconnect.</p>
+          </div>
+          <div class="meta">28m<br/><span class="dot ok"></span></div>
+        </div>
+
+        <div class="section-h">
+          <span>idle · macbook</span>
+          <button class="add-link">+ new chat</button>
+        </div>
+
+        <div class="chat-row">
+          <div class="sigil work">w</div>
+          <div>
+            <div class="head">
+              <b>site-inspection</b><span class="branch">· main</span>
+            </div>
+            <p class="preview"><em>Last activity 4h ago — refund unit suite passed (47/0).</em></p>
+          </div>
+          <div class="meta">4h<br/><span class="dot idle"></span></div>
+        </div>
+      </div>
+
+      <button class="fab" aria-label="New chat">
+        <span style="margin-top:-2px;">+</span>
+        <span class="label">new chat</span>
+      </button>
+
+      <div class="tabbar">
+        <div class="tab active"><span class="gly">≡</span>chats</div>
+        <div class="tab"><span class="gly">⌂</span>machines</div>
+        <div class="tab"><span class="gly">▤</span>repos</div>
+        <div class="tab"><span class="gly">⌖</span>quiet</div>
+      </div>
     </div>
 
-    <header class="masthead">
-      <div class="row">
-        <h1>setu <em>·</em> dispatches</h1>
+    <div class="copy">
+      <div class="num">i.</div>
+      <h2>Home is a roster of threads</h2>
+      <p>The feed becomes a chats list. Each row is a reopenable conversation, bucketed by machine. The flagged thread at the top wants a decision; everything else stays calm.</p>
+      <ul>
+        <li><b>Fleet strip</b> shows paired machines — tap to filter, last card is always <em>+ pair machine</em>.</li>
+        <li><b>Section headers</b> group threads by machine and offer an inline <em>+ new chat</em> link.</li>
+        <li><b>FAB</b> is the global new-chat entry — opens the composer sheet.</li>
+        <li><b>Tabbar</b> exposes machines and repos as first-class destinations.</li>
+      </ul>
+      <div class="proto">
+        ← <code>UserDO.snapshot</code> drives the fleet strip · each row keyed by <code>{machine_id, project_id, branch}</code> — same key the supervisor publishes.
       </div>
-      <div class="meta">Apr 30 · 3 workspaces · 1 needs you</div>
-      <div class="fleet">
-        <span><span class="dot warn"></span>kanban-work / payments-refund</span>
-        <span><span class="dot"></span>kanban-ops / main</span>
-        <span><span class="dot idle"></span>kanban-work / settings-revamp</span>
-      </div>
-    </header>
-
-    <div class="feed">
-
-      <!-- ── DECISION STRIP ── -->
-      <div class="decision" role="region" aria-label="Decision required">
-        <div class="label">▲ Decide · payments-refund</div>
-        <p class="what">
-          <strong>kanban-work</strong> wants to run
-          <code style="font-family:var(--mono);background:var(--paper-2);padding:1px 4px;border-radius:2px;">prisma migrate deploy</code>
-          against <strong>staging</strong>.
-        </p>
-        <p class="ctx">
-          Reason — “the schema change in commit b8f2 needs to land before I can validate the refund branch.”
-          Last 3 migrations on this branch were reversible.
-        </p>
-        <div class="actions">
-          <button class="btn allow">allow once</button>
-          <button class="btn deny">deny</button>
-          <button class="btn ghost" title="Worker holds the allowlist; Claude still gets plain allow">always for this branch</button>
-          <span class="kbd"><b>A</b> · <b>D</b></span>
-        </div>
-        <div class="proto">
-          ← <code>permission_request</code> · ↑ <code>permission_verdict { allow | deny }</code>
-          · scope <code>'branch'</code> held in Worker allowlist (not on channel wire)
-        </div>
-      </div>
-
-      <div class="rule">— · —</div>
-
-      <!-- ── SOLO DISPATCH ── -->
-      <article class="dispatch">
-        <div class="byline">
-          <span class="sigil work">w</span>
-          <span class="name">kanban-work</span>
-          <span>· payments-refund</span>
-          <span class="ts">2m</span>
-        </div>
-        <p class="body">
-          Picked up the failing test in <em>refund.spec.ts</em>. The mock clock is
-          drifting because we switched to Temporal; rewriting the fixture to use
-          <em>Temporal.Now.zonedDateTimeISO</em>. <em>No decisions needed yet.</em>
-        </p>
-        <div class="affordances">
-          <button class="chip" title="Structured tool-call timeline (persisted by Worker)">open transcript</button>
-          <button class="chip">follow agent</button>
-          <button class="chip primary">redirect…</button>
-        </div>
-        <div class="proto">
-          ← <code>report_progress { card_id, note }</code>
-          · structured transcript = persisted tool-call timeline; raw Claude turns need stdio capture
-        </div>
-      </article>
-
-      <!-- ── CROSS-AGENT DISPATCH ── -->
-      <article class="dispatch crossed">
-        <div class="byline">
-          <span class="sigil ops">o</span>
-          <span class="name">kanban-ops</span>
-          <span>→</span>
-          <span class="sigil work" style="margin-left:-2px;">w</span>
-          <span class="name">kanban-work</span>
-          <span class="crossed-tag">cross</span>
-          <span class="ts">11m</span>
-        </div>
-        <p class="body">
-          Heads up — I'm rotating the staging DB credentials at 14:00.
-          You'll see one reconnect; if your migration is mid-flight, hold it.
-          <em>(reply here to ack, or I'll assume you're fine)</em>
-        </p>
-        <div class="redirect">
-          <b>You · redirect</b>
-          <div class="input">hold migration until 14:05, retry then</div>
-        </div>
-        <div class="affordances">
-          <button class="chip primary">send redirect</button>
-          <button class="chip">ack</button>
-          <button class="chip">open thread</button>
-        </div>
-        <div class="proto">
-          ← new <code>dispatch { to_role, body, kind }</code> reply tool · Worker fans out to UI feed + <code>push_event { event_kind:'peer_message' }</code> into target session
-        </div>
-      </article>
-
-      <!-- ── DIGEST CARD ── -->
-      <div class="digest">
-        <div class="label">◑ quiet hours digest · 22:00 → 07:00</div>
-        <ul>
-          <li><b>kanban-work</b> finished the refund unit suite (47 pass, 0 fail) at 03:12.</li>
-          <li><b>kanban-ops</b> ran nightly index health check — 2 indexes flagged, no action taken.</li>
-          <li><b>kanban-work</b> rebased <em>settings-revamp</em> onto main; clean.</li>
-        </ul>
-        <div class="footer">
-          <span>3 dispatches batched</span>
-          <span>tap to expand</span>
-        </div>
-        <div class="proto">
-          ← UI-side aggregation of <code>report_progress</code> + <code>update_card</code> · no transport feature
-        </div>
-      </div>
-
-      <!-- ── SOLO, AUTHORED VOICE ── -->
-      <article class="dispatch">
-        <div class="byline">
-          <span class="sigil work">w</span>
-          <span class="name">kanban-work</span>
-          <span>· settings-revamp</span>
-          <span class="ts">1h</span>
-        </div>
-        <p class="body">
-          I tried two approaches for the org-switching dropdown. The portal one
-          works in Safari but breaks focus-trap on iOS keyboards. The
-          inline-popover one is uglier but accessible. <em>Going with inline
-          unless you tell me otherwise in the next hour.</em>
-        </p>
-        <div class="affordances">
-          <button class="chip primary">approve plan</button>
-          <button class="chip">redirect…</button>
-          <button class="chip">show me both ⚠</button>
-          <button class="chip">snooze 1h</button>
-        </div>
-        <div class="proto">
-          ← <code>request_input { prompt }</code> · ↑ <code>push_event { event_kind:'input_response' }</code>
-          · "committing" voice + "approve plan" maps to <code>dispatch { kind:'committing', default_after_ms }</code>
-        </div>
-      </article>
-
-    </div>
-
-    <div class="rail">
-      <div class="modes">
-        <span class="active">feed</span>
-        <span>follow</span>
-        <span>quiet</span>
-      </div>
-      <div>3 live · 1 ⚑</div>
     </div>
   </div>
 
-  <aside class="right">
-    <h2>Backed by protocol</h2>
-    <p><b>Decision strip</b> ← <code>permission_request</code> ↑ <code>permission_verdict</code></p>
-    <p><b>Solo dispatch</b> (noting) ← <code>report_progress { note }</code> — <em>note</em> field carries the authored prose</p>
-    <p><b>Solo dispatch</b> (asking) ← <code>request_input { prompt }</code> ↑ <code>push_event { event_kind:'input_response' }</code></p>
-    <p><b>Status dots</b> ← <code>update_card.status</code> ('blocked'|'in_progress'|'done')</p>
-    <p><b>Fleet header</b> ← <code>heartbeat.sessions_live</code> + open requests</p>
-    <p><b>Digest</b> ← UI-side rollup, no new transport</p>
-    <hr/>
-    <h2>Shippable via our protocol</h2>
-    <p>Channels API itself is minimal (only <code>channel</code> + <code>permission</code> notifications). The gaps below extend <em>our</em> wire (reply tools + Worker state), not Anthropic's.</p>
-    <p><span class="tag">cross</span> new <code>dispatch { to_role, body, kind }</code> reply tool · Worker fans out to UI feed + a <code>push_event</code> into target session</p>
-    <p><span class="tag">scope</span> Worker holds the allowlist; auto-replies <code>allow</code> to future matches. Claude still sees plain allow/deny.</p>
-    <p><span class="tag">kind</span> unified <code>dispatch { kind, body, default_after_ms? }</code> — gives "committing" voice for free</p>
-    <p><span class="tag">tail</span> <em>structured</em> transcript (tool-call timeline) is already on the wire — Worker persists, UI renders</p>
-    <hr/>
-    <h2 style="color:var(--accent);">Out of channels scope</h2>
-    <p><span class="tag gap">raw</span> raw Claude assistant turns / thinking — not exposed through channels. Capture at Bun by tailing Claude Code's session JSON or wrapping stdio. Separate workstream.</p>
-  </aside>
+  <!-- ╔══════════════════════════════════════════════════════╗ -->
+  <!-- ║ 2. CHAT PANE                                          ║ -->
+  <!-- ╚══════════════════════════════════════════════════════╝ -->
+  <div class="scene flip">
+    <div class="copy">
+      <div class="num">ii.</div>
+      <h2>Open a thread, edit the conversation</h2>
+      <p>Inside a chat, dispatches stack as bubbles. Your redirects sit on the right. Decision strips render inline where the agent paused for permission, and tool calls collapse into muted dashed rows so the prose is what reads.</p>
+      <ul>
+        <li><b>Three voices</b> — agent dispatch (white), peer ↔ message (cream), tool call (dashed).</li>
+        <li><b>Committing</b> bubbles get the oxblood border + countdown; tap to redirect before it commits.</li>
+        <li><b>Composer</b> always available — typing here sends a <code>push_event</code> redirect, even mid-task.</li>
+        <li><b>Aux chips</b> above the field offer one-tap redirects (<em>stop</em>, <em>summarize</em>, <em>follow</em>).</li>
+      </ul>
+      <div class="proto">
+        ← agent bubble = <code>report_progress { note }</code> · me bubble = <code>push_event { event_kind:'redirect' }</code> · decision = <code>permission_request</code> ↑ <code>permission_verdict</code>
+      </div>
+    </div>
+
+    <div class="phone" aria-label="Chat pane — payments-refund thread">
+      <div class="notch"></div>
+      <div class="status"><span>9:41</span><span style="letter-spacing:.16em;">●●● 5G</span></div>
+
+      <div class="topbar">
+        <div class="back">‹</div>
+        <div class="title">
+          kanban-work <em>·</em> payments-refund
+          <small>tower · branch live · 2 tools active</small>
+        </div>
+        <button class="icon-btn" title="Thread settings">⋯</button>
+      </div>
+
+      <div class="thread">
+        <div class="day">Today · 09:32</div>
+
+        <div class="bubble">
+          <div class="byline">
+            <b>kanban-work</b><span>· started</span><span class="ts">09:32</span>
+          </div>
+          <p class="body">Picked up the failing test in <em>refund.spec.ts</em>. The mock clock is drifting because we switched to Temporal; rewriting the fixture to use <code>Temporal.Now.zonedDateTimeISO</code>.</p>
+        </div>
+
+        <div class="bubble tool">
+          ▸ <b style="color:var(--ink);">edit</b> packages/api/test/refund.spec.ts <span style="color:var(--ink);">+12 −4</span>
+        </div>
+
+        <div class="me">
+          run that one in isolation first — full suite later
+          <span class="ts">09:34</span>
+        </div>
+
+        <div class="bubble">
+          <div class="byline">
+            <b>kanban-work</b><span class="ts">09:38</span>
+          </div>
+          <p class="body">Got it — running just <code>refund.spec.ts</code>. <em>4 of 5 cases pass; one needs the migration to land.</em></p>
+        </div>
+
+        <div class="decision" role="region" aria-label="Decision required">
+          <div class="label">▲ decide · payments-refund</div>
+          <p class="what"><strong>kanban-work</strong> wants to run <code style="font-family:var(--mono);background:var(--paper-2);padding:0 4px;border-radius:2px;">prisma migrate deploy</code> against staging.</p>
+          <p class="ctx">Last 3 migrations on this branch were reversible. The schema change in commit b8f2 needs to land before the refund branch can validate.</p>
+          <div class="row">
+            <button class="btn allow">allow once</button>
+            <button class="btn deny">deny</button>
+            <button class="btn ghost">always · this branch</button>
+          </div>
+        </div>
+
+        <div class="bubble peer">
+          <div class="byline">
+            <b>kanban-ops</b> → <b>kanban-work</b>
+            <span class="crossed-tag">↔ peer</span>
+            <span class="ts">09:40</span>
+          </div>
+          <p class="body">Heads up — I'm rotating staging DB credentials at 14:00. You'll see one reconnect; if your migration is mid-flight, hold it.</p>
+          <div class="actions">
+            <button class="chip primary">redirect…</button>
+            <button class="chip">ack</button>
+            <button class="chip">jump to ops thread</button>
+          </div>
+        </div>
+
+        <div class="bubble committing">
+          <div class="byline">
+            <b>kanban-work</b><span>· committing in 0:42</span><span class="ts">09:41</span>
+          </div>
+          <p class="body">I'll go with <em>inline popover</em> for the org dropdown. Two approaches tested; portal version breaks focus-trap on iOS.</p>
+          <div class="commit-line">⏳ auto-applies if you don't redirect</div>
+          <div class="actions">
+            <button class="chip primary">approve now</button>
+            <button class="chip danger">redirect</button>
+            <button class="chip">show me both ⚠</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer-aux">
+        <button class="chip">stop</button>
+        <button class="chip">summarize so far</button>
+        <button class="chip">follow</button>
+      </div>
+      <div class="composer">
+        <div class="field"><span class="ph">redirect kanban-work…</span><span class="cur"></span></div>
+        <button class="send disabled">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ╔══════════════════════════════════════════════════════╗ -->
+  <!-- ║ 3. NEW CHAT SHEET                                     ║ -->
+  <!-- ╚══════════════════════════════════════════════════════╝ -->
+  <div class="scene">
+    <div class="phone" aria-label="New chat composer">
+      <div class="notch"></div>
+      <div class="status"><span>9:41</span><span style="letter-spacing:.16em;">●●● 5G</span></div>
+
+      <!-- dimmed home behind the sheet -->
+      <header class="masthead" style="opacity:.45;">
+        <h1>setu <em>·</em> chats</h1>
+        <div class="meta">May 4 · 2 machines · 4 threads</div>
+      </header>
+      <div class="filterbar" style="opacity:.45;">
+        <button class="pill active">all</button>
+        <button class="pill">flagged</button>
+        <button class="pill">live</button>
+      </div>
+      <div style="flex:1 1 auto; opacity:.45; padding: 0 14px; pointer-events:none;">
+        <div class="chat-row" style="grid-template-columns: 36px 1fr; padding: 10px 0;">
+          <div class="sigil work">w</div>
+          <div>
+            <div class="head"><b>kanban-work</b><span class="branch">· payments-refund</span></div>
+            <p class="preview">▲ wants to run <em>prisma migrate deploy</em>…</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheet-backdrop"></div>
+      <div class="sheet">
+        <div class="grip"></div>
+        <h3>New chat <em>·</em> kick off a session</h3>
+        <p class="lede">Pick where it runs and what it works on. We'll spawn the supervisor on that machine, in that repo, and open the thread.</p>
+
+        <div class="field-label">Machine <span class="hint">where the supervisor runs</span></div>
+        <div class="picker">
+          <div class="opt active">
+            <b>tower</b>
+            <small>● 2 sessions · WSL2</small>
+          </div>
+          <div class="opt">
+            <b>macbook</b>
+            <small>● idle · darwin</small>
+          </div>
+          <div class="opt add">+ pair machine</div>
+        </div>
+
+        <div class="field-label">Repository <span class="hint">on tower</span></div>
+        <div class="picker">
+          <div class="opt active">
+            <b>kanban-work</b>
+            <small>~/code/kanban-work · main</small>
+          </div>
+          <div class="opt">
+            <b>kanban-ops</b>
+            <small>~/code/kanban-ops · main</small>
+          </div>
+          <div class="opt add">+ add repo</div>
+        </div>
+
+        <div class="field-label">Branch <span class="hint">create from main</span></div>
+        <div class="picker">
+          <div class="opt active">
+            <b>+ new branch</b>
+            <small>fix/refund-rounding</small>
+          </div>
+          <div class="opt"><b>main</b><small>4h ago</small></div>
+          <div class="opt"><b>payments-refund</b><small>2m ago · busy</small></div>
+        </div>
+
+        <div class="field-label">Initial prompt</div>
+        <div class="prompt-area">
+          <span>The refund total is off by one cent for currencies with three decimal places. Look at how we round in </span><code>refund.ts</code><span> — fix it and add a regression test.</span><span class="cur"></span>
+        </div>
+
+        <div class="start-row">
+          <button class="btn-big">start session →</button>
+          <span class="hint">also: ⌘↩</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="copy">
+      <div class="num">iii.</div>
+      <h2>Compose a chat in one sheet</h2>
+      <p>The FAB lifts a single sheet that asks the three things needed to spawn a supervisor: which machine, which repo, which branch. Each picker ends with an explicit <em>add</em> tile so onboarding gaps surface here, not behind a settings menu.</p>
+      <ul>
+        <li><b>Machine</b> — paired Bun-CLI hosts, with <em>+ pair machine</em> as the rightmost tile.</li>
+        <li><b>Repo</b> — projects registered on the chosen machine; <em>+ add repo</em> opens the registration flow scoped to that machine.</li>
+        <li><b>Branch</b> — defaults to a new branch from <code>main</code>; existing branches available, busy ones marked.</li>
+        <li><b>Prompt</b> — the first message; tap <em>start</em> spawns the worktree, attaches Claude, opens the thread.</li>
+      </ul>
+      <div class="proto">
+        ↑ UI sends <code>create_session { machine_id, project_id, branch, prompt }</code> · UserDO routes to MachineDO · supervisor materializes worktree, launches Claude, returns <code>session_registered</code>.
+      </div>
+    </div>
+  </div>
+
+  <!-- ╔══════════════════════════════════════════════════════╗ -->
+  <!-- ║ 4. PAIR MACHINE                                       ║ -->
+  <!-- ╚══════════════════════════════════════════════════════╝ -->
+  <div class="scene flip">
+    <div class="copy">
+      <div class="num">iv.</div>
+      <h2>Pair a machine with a 6-digit code</h2>
+      <p>Adding a machine means running the Bun CLI somewhere and binding it to your account. The screen shows the install command, a one-shot pairing PIN, and a live indicator that flips when the supervisor connects.</p>
+      <ul>
+        <li><b>Install</b> — copy-pasteable line for any shell; the same binary on every OS.</li>
+        <li><b>Pair</b> — six-digit PIN with a TTL; ties the supervisor's first WS handshake to <em>your</em> UserDO.</li>
+        <li><b>Heartbeat</b> — once connected, the row goes green and the sheet auto-dismisses.</li>
+      </ul>
+      <div class="proto">
+        ↑ <code>POST /pair</code> on UserDO mints PIN · ↓ supervisor sends <code>pair { pin }</code> on first WS · UserDO writes <code>{ machine_id, user_id }</code> and accepts subsequent <code>heartbeat</code> frames.
+      </div>
+    </div>
+
+    <div class="phone" aria-label="Pair machine">
+      <div class="notch"></div>
+      <div class="status"><span>9:41</span><span style="letter-spacing:.16em;">●●● 5G</span></div>
+
+      <div class="topbar">
+        <div class="back">‹</div>
+        <div class="title">
+          Pair machine
+          <small>tab · machines</small>
+        </div>
+      </div>
+
+      <div class="form">
+        <h3>Pair a new <em>machine</em></h3>
+        <p class="lede">Run the supervisor on any laptop, server, or workstation. Each machine pairs once and can host any number of repos and sessions.</p>
+
+        <div class="step">
+          <div class="n">1</div>
+          <div>
+            <p class="what">Install the CLI on that machine.</p>
+            <div class="codeblock">
+              <button class="copy-btn">copy</button>
+              <span class="c1">curl -fsSL setu.sh/install</span> <span class="c2">| sh</span>
+              <br/><span class="c3"># or: bun add -g @setu/cli</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="n">2</div>
+          <div>
+            <p class="what">Run it once with your pairing code.</p>
+            <div class="codeblock">
+              <button class="copy-btn">copy</button>
+              <span class="c1">setu pair</span> <span class="c2">--code 482-913</span>
+            </div>
+            <div class="pair-card">
+              <div class="pin-hint">your code</div>
+              <div class="pin">482·913</div>
+              <div class="timer">⏳ expires in 9:42</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="n">3</div>
+          <div>
+            <p class="what">Waiting for handshake…</p>
+            <div class="listing">
+              <div class="row">
+                <div class="glyph">⌂</div>
+                <div class="col">
+                  <div class="name">tower</div>
+                  <div class="path">paired · 11 minutes ago</div>
+                </div>
+                <div class="meta-r">live</div>
+              </div>
+              <div class="row">
+                <div class="glyph">⌂</div>
+                <div class="col">
+                  <div class="name">macbook</div>
+                  <div class="path">paired · 2 days ago</div>
+                </div>
+                <div class="meta-r">idle</div>
+              </div>
+              <div class="row" style="background:#fffaf3;">
+                <div class="glyph" style="border-style:dashed; color:var(--accent); border-color:var(--accent);">…</div>
+                <div class="col">
+                  <div class="name" style="color:var(--accent);">awaiting handshake</div>
+                  <div class="path">code 482-913</div>
+                </div>
+                <div class="meta-r" style="color:var(--accent);">↻</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footnote">
+          <b style="color:var(--ink);">Headless?</b> Same flow over SSH. Pairing only needs outbound HTTPS — no inbound port, no tunnel.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ╔══════════════════════════════════════════════════════╗ -->
+  <!-- ║ 5. ADD REPO                                           ║ -->
+  <!-- ╚══════════════════════════════════════════════════════╝ -->
+  <div class="scene">
+    <div class="phone" aria-label="Add repository">
+      <div class="notch"></div>
+      <div class="status"><span>9:41</span><span style="letter-spacing:.16em;">●●● 5G</span></div>
+
+      <div class="topbar">
+        <div class="back">‹</div>
+        <div class="title">
+          Add repository
+          <small>on tower · 2 already registered</small>
+        </div>
+      </div>
+
+      <div class="form">
+        <h3>Register a <em>repo</em> on tower</h3>
+        <p class="lede">setu doesn't clone for you — point the supervisor at a path it can already see. Pick from what's on disk or run a one-line command.</p>
+
+        <div class="field-label">Detected on tower <span class="hint">git roots under ~/code, ~/work, ~/projects</span></div>
+        <div class="listing">
+          <div class="row ok">
+            <div class="glyph ok">✓</div>
+            <div class="col">
+              <div class="name">kanban-work</div>
+              <div class="path">~/code/kanban-work · 47 branches</div>
+            </div>
+            <div class="meta-r">registered</div>
+          </div>
+          <div class="row ok">
+            <div class="glyph ok">✓</div>
+            <div class="col">
+              <div class="name">kanban-ops</div>
+              <div class="path">~/code/kanban-ops · 12 branches</div>
+            </div>
+            <div class="meta-r">registered</div>
+          </div>
+          <div class="row">
+            <div class="glyph">▤</div>
+            <div class="col">
+              <div class="name">site-inspection</div>
+              <div class="path">~/code/site-inspection · 8 branches</div>
+            </div>
+            <div class="meta-r" style="color:var(--accent);">+ add</div>
+          </div>
+          <div class="row">
+            <div class="glyph">▤</div>
+            <div class="col">
+              <div class="name">parakh</div>
+              <div class="path">~/work/parakh · 21 branches</div>
+            </div>
+            <div class="meta-r" style="color:var(--accent);">+ add</div>
+          </div>
+        </div>
+
+        <div class="field-label" style="margin-top:18px;">Or do it from a shell</div>
+        <p class="lede" style="margin-bottom:8px;">Run on the same machine — supervisor picks it up live, no restart.</p>
+        <div class="codeblock">
+          <button class="copy-btn">copy</button>
+          <span class="c1">setu project add</span> <span class="c2">my-repo /abs/path/to/repo</span>
+          <br/><span class="c3"># or with a custom id:</span>
+          <br/><span class="c1">setu project add</span> <span class="c2">my-repo /abs/path/to/repo --id custom-id</span>
+        </div>
+
+        <div class="field-label" style="margin-top:18px;">Don't have it cloned yet?</div>
+        <div class="codeblock">
+          <button class="copy-btn">copy</button>
+          <span class="c3"># 1. clone it on tower</span>
+          <br/><span class="c1">git clone</span> <span class="c2">git@github.com:org/new-repo.git ~/code/new-repo</span>
+          <br/><span class="c3"># 2. register</span>
+          <br/><span class="c1">setu project add</span> <span class="c2">new-repo ~/code/new-repo</span>
+        </div>
+
+        <div class="footnote">
+          <b style="color:var(--ink);">Per-repo channels</b> — drop a <code>.setu/channels.json</code> in the repo root to wire MCP servers (kanban-work, parakh, custom). The supervisor mounts them per-session.
+        </div>
+      </div>
+    </div>
+
+    <div class="copy">
+      <div class="num">v.</div>
+      <h2>Repos: pick or paste</h2>
+      <p>The supervisor scans configured roots and surfaces git repos it can see. Already-registered ones are checked. Tap <em>+ add</em> to register, or copy the equivalent CLI command if you'd rather do it from a shell.</p>
+      <ul>
+        <li><b>Detected list</b> — green check for registered, accent <em>+ add</em> for the rest.</li>
+        <li><b>Shell parity</b> — every UI action has its CLI twin (<code>setu project add</code>) shown right below. The UI is a façade over the same store.</li>
+        <li><b>Bring-your-own</b> — for repos not yet cloned, the screen shows the two-line flow rather than pretending to handle git auth.</li>
+        <li><b>Per-repo wiring</b> — <code>.setu/channels.json</code> is the per-repo MCP config; surfaced as a footnote, not pushed.</li>
+      </ul>
+      <div class="proto">
+        ↑ <code>project_add { project_id, root_path }</code> on the supervisor's WS · MachineDO updates its registry · UserDO snapshot regenerates → home repos tab refreshes live.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════╗ -->
+<!-- ║ FOOTER — protocol mapping                             ║ -->
+<!-- ╚══════════════════════════════════════════════════════╝ -->
+<div class="footer">
+  <div>
+    <h3>Backed by protocol</h3>
+    <p><b style="color:var(--paper);">Chat row</b> ← <code>thread.last_event</code> (UserDO-side rollup of report_progress / dispatch / permission_request)</p>
+    <p><b style="color:var(--paper);">Agent bubble</b> ← <code>report_progress { note }</code></p>
+    <p><b style="color:var(--paper);">Peer bubble</b> ← <code>dispatch { to_role, body, kind:'peer_message' }</code></p>
+    <p><b style="color:var(--paper);">Decision strip</b> ← <code>permission_request</code> ↑ <code>permission_verdict</code></p>
+    <p><b style="color:var(--paper);">User redirect</b> ↑ <code>push_event { event_kind:'redirect' }</code></p>
+    <p><b style="color:var(--paper);">Fleet strip</b> ← <code>UserDO.snapshot.machines[]</code> + <code>heartbeat</code></p>
+  </div>
+  <div>
+    <h3>Net-new for chat-pane UX</h3>
+    <p><span class="tag">create</span> <code>create_session</code> reply tool — UI → UserDO → MachineDO → supervisor spawn (worktree + Claude). Replaces "ssh and run setu manually".</p>
+    <p><span class="tag">pair</span> <code>POST /pair</code> mints PIN; supervisor's first WS frame is <code>pair { pin }</code> — binds machine_id ↔ user_id.</p>
+    <p><span class="tag">repo</span> <code>project_add</code> already exists on bun-cli; UI now drives it via the supervisor channel.</p>
+    <p><span class="tag">commit</span> <code>dispatch { kind:'committing', default_after_ms }</code> renders the oxblood countdown bubble.</p>
+    <p><span class="tag">redirect</span> chat composer = persistent <code>push_event</code> stream into the active session, not just paired with a request_input.</p>
+  </div>
+  <div>
+    <h3>Out of scope</h3>
+    <p><span class="tag gap">raw</span> Raw Claude assistant turns / thinking — still not on the wire. Thread shows authored prose + tool-call timeline. Capture via stdio is a separate workstream.</p>
+    <p><span class="tag gap">clone</span> The UI does not run <code>git clone</code> — auth is the user's. We surface the command, not the secret.</p>
+    <p><span class="tag gap">pwd</span> No file picker into arbitrary paths from the phone — the supervisor scans configured roots; everything else is a CLI command.</p>
+    <p style="margin-top:16px;color:#6b6353;font-style:italic;font-family:var(--serif);">setu is a bridge. The phone is the editor's desk; the machines do the work.</p>
+  </div>
+</div>
+
 </body>
 </html>

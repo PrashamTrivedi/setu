@@ -1,18 +1,30 @@
 /// <reference types="@cloudflare/workers-types" />
-import type { BunToWorker, Card, CardStatus, ChannelEvent, WorkerToBun } from '@kanban/protocol'
+import type {
+  BunToWorker,
+  Card,
+  CardStatus,
+  ChannelEvent,
+  DispatchKind,
+  SessionRole,
+  WorkerToBun,
+} from '@kanban/protocol'
 import { canTransition } from '@kanban/protocol'
-import type { Env } from './types.ts'
+import { type AllowlistRow, branchKey, fingerprint, foreverKey } from './permission-allowlist.ts'
+import type { CommittingAlarmRecord, Env, FeedItem, PendingPermission } from './types.ts'
+
+const FEED_CAP_PER_CARD = 200
+const FEED_INDEX_CAP = 1000
 
 /**
- * One DO instance per `project_id` (plus a singleton at name `__registry__`).
+ * One DO instance per `project_id`.
  *
- * The DO no longer holds a WS to Bun directly. Instead it tracks which
- * `machine_id` claims this project, then forwards outbound messages to the
- * corresponding MachineDO via DO-to-DO RPC. Inbound messages from Bun arrive
- * at MachineDO and get fanned out to the right ProjectDO via /_inbound.
+ * Phase 1 adds the authored-dispatch feed and committing-dispatch alarms.
+ * Phase 1.5 lets it look up live peer sessions via MachineDO snapshot.
+ * Phase 2 broadcasts FeedItems to UserDO for UI fan-out.
+ * Phase 3 adds a permission allowlist with auto-allow on fingerprint hits.
  *
- * The singleton `__registry__` instance holds the machine→projects index that
- * the UI uses to enumerate known projects without listing DOs.
+ * The legacy `__registry__` ProjectDO singleton is retired — its job moved
+ * to UserDO.
  */
 export class ProjectDO implements DurableObject {
   private state: DurableObjectState
@@ -28,9 +40,6 @@ export class ProjectDO implements DurableObject {
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url)
     const path = url.pathname
-
-    // ─── Registry singleton ──────────────────────────────────────────────
-    if (path.startsWith('/_registry/')) return this.handleRegistry(req, path)
 
     // ─── Internal RPC from MachineDO ─────────────────────────────────────
     if (req.method === 'POST' && path === '/_pair') {
@@ -48,6 +57,22 @@ export class ProjectDO implements DurableObject {
       const msg = (await req.json()) as BunToWorker
       await this.onInboundFromMachine(msg)
       return Response.json({ ok: true })
+    }
+
+    // ─── Internal RPC from UserDO (Phase 2/3) ────────────────────────────
+    if (req.method === 'POST' && path === '/_ui_verdict') {
+      const body = (await req.json()) as {
+        request_id: string
+        behavior: 'allow' | 'deny'
+        scope: 'once' | 'branch' | 'forever'
+      }
+      await this.applyUiPermissionVerdict(body)
+      return Response.json({ ok: true })
+    }
+    if (req.method === 'GET' && path === '/_feed_replay') {
+      const since = Number(url.searchParams.get('since') ?? '0')
+      const items = await this.feedReplay(since)
+      return Response.json({ items })
     }
 
     // ─── Public REST (called via worker proxy) ───────────────────────────
@@ -80,37 +105,64 @@ export class ProjectDO implements DurableObject {
     return new Response('not found', { status: 404 })
   }
 
-  // ─── Registry singleton (only meaningful at name '__registry__') ──────
-  private async handleRegistry(req: Request, path: string): Promise<Response> {
-    if (req.method === 'POST' && path === '/_registry/upsert') {
-      const body = (await req.json()) as { machine_id: string; projects: string[] }
-      await this.state.storage.put(`machine:${body.machine_id}`, {
-        machine_id: body.machine_id,
-        projects: body.projects,
-        connected_at: Date.now(),
-      })
-      return Response.json({ ok: true })
+  // ─── Alarm: committing-dispatch deadlines ──────────────────────────────
+  async alarm(): Promise<void> {
+    const now = Date.now()
+    const all = (await this.state.storage.list<CommittingAlarmRecord>({
+      prefix: 'alarm:',
+    })) as Map<string, CommittingAlarmRecord>
+
+    let nextDeadline = Number.POSITIVE_INFINITY
+    for (const [key, rec] of all) {
+      if (rec.deadline <= now) {
+        await this.fireCommitting(rec)
+        await this.state.storage.delete(key)
+      } else if (rec.deadline < nextDeadline) {
+        nextDeadline = rec.deadline
+      }
     }
-    if (req.method === 'POST' && path === '/_registry/down') {
-      const body = (await req.json()) as { machine_id: string }
-      await this.state.storage.delete(`machine:${body.machine_id}`)
-      return Response.json({ ok: true })
+
+    if (nextDeadline !== Number.POSITIVE_INFINITY) {
+      await this.state.storage.setAlarm(nextDeadline)
+      await this.state.storage.put('alarm_next', nextDeadline)
+    } else {
+      await this.state.storage.delete('alarm_next')
     }
-    if (req.method === 'GET' && path === '/_registry/list') {
-      const all = (await this.state.storage.list<{
-        machine_id: string
-        projects: string[]
-        connected_at: number
-      }>({ prefix: 'machine:' })) as Map<
-        string,
-        { machine_id: string; projects: string[]; connected_at: number }
-      >
-      const machines = [...all.values()]
-      const projectSet = new Set<string>()
-      for (const m of machines) for (const p of m.projects) projectSet.add(p)
-      return Response.json({ machines, projects: [...projectSet].sort() })
+  }
+
+  private async fireCommitting(rec: CommittingAlarmRecord): Promise<void> {
+    const feedKey = `feed:${rec.card_id}:${rec.feed_seq}`
+    const item = await this.state.storage.get<FeedItem>(feedKey)
+    if (item && item.kind === 'dispatch' && item.committing) {
+      item.committing = { ...item.committing, resolved: true }
+      await this.state.storage.put(feedKey, item)
+      await this.broadcastFeed(item)
     }
-    return new Response('not found', { status: 404 })
+    if (rec.paired_request_tool_call_id) {
+      const card = await this.getCard(rec.card_id)
+      if (card?.pending_input) {
+        card.pending_input = null
+        await this.putCard(card)
+      }
+      const machine_id = await this.state.storage.get<string>('machine_id')
+      if (machine_id) {
+        await this.sendToMachine(machine_id, {
+          type: 'push_event',
+          project_id: rec.project_id,
+          branch: rec.branch,
+          channel_event: {
+            content: '__committing_window_expired__',
+            meta: {
+              project_id: rec.project_id,
+              branch: rec.branch,
+              card_id: rec.card_id,
+              role: 'kanban-work',
+              event_kind: 'input_response',
+            },
+          },
+        })
+      }
+    }
   }
 
   // ─── persistence helpers ───────────────────────────────────────────────
@@ -155,8 +207,10 @@ export class ProjectDO implements DurableObject {
     if (!canTransition(card.status, 'approved')) {
       return { error: `illegal_transition_from_${card.status}` }
     }
+    const from = card.status
     card.status = 'approved'
     await this.putCard(card)
+    await this.appendCardStateFeed(card.project_id, card.id, from, 'approved')
     await this.requestOpsSpawn(card)
     return card
   }
@@ -193,8 +247,12 @@ export class ProjectDO implements DurableObject {
       initial_event: initial,
     })
 
-    if (canTransition(card.status, 'assigned')) card.status = 'assigned'
-    await this.putCard(card)
+    if (canTransition(card.status, 'assigned')) {
+      const from = card.status
+      card.status = 'assigned'
+      await this.putCard(card)
+      await this.appendCardStateFeed(card.project_id, card.id, from, 'assigned')
+    }
     return card
   }
 
@@ -237,8 +295,10 @@ export class ProjectDO implements DurableObject {
       },
     }
     if (canTransition(card.status, 'merging')) {
+      const from = card.status
       card.status = 'merging'
       await this.putCard(card)
+      await this.appendCardStateFeed(card.project_id, card.id, from, 'merging')
     }
     await this.sendToMachine(machine_id, {
       type: 'spawn_session',
@@ -278,7 +338,7 @@ export class ProjectDO implements DurableObject {
         return
       }
       case 'permission_request':
-        // v1.5 surface
+        await this.applyPermissionRequest(msg)
         return
     }
   }
@@ -303,21 +363,30 @@ export class ProjectDO implements DurableObject {
             : a.status === 'in_progress'
               ? 'in_progress'
               : card.status
+        const from = card.status
         if (canTransition(card.status, next)) card.status = next
         if (a.evidence) card.evidence.push({ ...a.evidence, at: Date.now() })
         await this.putCard(card)
+        if (from !== card.status) {
+          await this.appendCardStateFeed(card.project_id, card.id, from, card.status)
+        }
         break
       }
       case 'request_input': {
         const a = msg.args as { card_id: string; prompt: string }
         card.pending_input = { prompt: a.prompt, at: Date.now() }
         await this.putCard(card)
+        // If a committing dispatch is awaiting on this card, pair it so that
+        // when the alarm fires we can auto-emit input_response.
+        await this.pairPendingCommittingTo(card.id, msg.tool_call_id)
+        await this.emitSyntheticDispatch(card, msg.role ?? 'kanban-work', 'asking', a.prompt)
         break
       }
       case 'report_progress': {
         const a = msg.args as { card_id: string; note: string }
         card.evidence.push({ kind: 'note', value: a.note, at: Date.now() })
         await this.putCard(card)
+        await this.emitSyntheticDispatch(card, msg.role ?? 'kanban-work', 'noting', a.note)
         break
       }
       case 'report_step': {
@@ -334,6 +403,7 @@ export class ProjectDO implements DurableObject {
           detail: a.detail,
           at: Date.now(),
         })
+        const from = card.status
         if (a.step === 'merge' && a.status === 'ok' && canTransition(card.status, 'merged')) {
           card.status = 'merged'
         } else if (a.step === 'merge' && a.status === 'failed') {
@@ -356,8 +426,383 @@ export class ProjectDO implements DurableObject {
           card.error = a.detail ?? 'cleanup failed'
         }
         await this.putCard(card)
+        if (from !== card.status) {
+          await this.appendCardStateFeed(card.project_id, card.id, from, card.status)
+        }
+        const stepBody = `${a.step}: ${a.status}${a.detail ? ` — ${a.detail}` : ''}`
+        await this.emitSyntheticDispatch(card, msg.role ?? 'kanban-ops', 'noting', stepBody)
+        break
+      }
+      case 'dispatch': {
+        const a = msg.args as {
+          card_id: string
+          body: string
+          kind: DispatchKind
+          to_role?: SessionRole
+          default_after_ms?: number
+        }
+        await this.handleDispatch(msg, a, card)
         break
       }
     }
+  }
+
+  // ─── Phase 1 — dispatch handler ────────────────────────────────────────
+  private async handleDispatch(
+    msg: Extract<BunToWorker, { type: 'reply_tool_call' }>,
+    a: {
+      card_id: string
+      body: string
+      kind: DispatchKind
+      to_role?: SessionRole
+      default_after_ms?: number
+    },
+    card: Card,
+  ): Promise<void> {
+    const seq = await this.nextSeq()
+    const dispatch_id = crypto.randomUUID()
+    const now = Date.now()
+    const from_role: SessionRole = msg.role ?? 'kanban-work'
+
+    const item: FeedItem = {
+      id: dispatch_id,
+      seq,
+      ts: now,
+      kind: 'dispatch',
+      project_id: card.project_id,
+      card_id: card.id,
+      from_role,
+      dispatch_kind: a.kind,
+      body: a.body,
+      ...(a.to_role ? { to_role: a.to_role } : {}),
+      ...(a.kind === 'committing' && a.default_after_ms
+        ? {
+            committing: {
+              default_after_ms: a.default_after_ms,
+              deadline: now + a.default_after_ms,
+            },
+          }
+        : {}),
+    }
+
+    await this.state.storage.put(`feed:${card.id}:${seq}`, item)
+    await this.state.storage.put(`feed_index:${seq}`, {
+      card_id: card.id,
+      ts: now,
+      kind: 'dispatch',
+    })
+    await this.evictFeedIfNeeded(card.id)
+    await this.evictFeedIndexIfNeeded()
+
+    if (item.kind === 'dispatch' && item.committing) {
+      const rec: CommittingAlarmRecord = {
+        dispatch_id,
+        card_id: card.id,
+        project_id: card.project_id,
+        feed_seq: seq,
+        deadline: item.committing.deadline,
+        tool_call_id: msg.tool_call_id,
+        branch: msg.branch,
+      }
+      await this.state.storage.put(`alarm:${dispatch_id}`, rec)
+      await this.maybeSetAlarm(item.committing.deadline)
+    }
+
+    await this.broadcastFeed(item)
+
+    if (a.to_role) {
+      await this.routePeerMessage({
+        from_role,
+        to_role: a.to_role,
+        dispatch_kind: a.kind,
+        body: a.body,
+        project_id: card.project_id,
+        branch: msg.branch,
+        card_id: card.id,
+      }).catch((err) => console.error('peer route failed', err))
+    }
+  }
+
+  /**
+   * Emit a feed item synthesized from a non-`dispatch` reply tool. Lets the
+   * UI reflect Claude's activity (request_input, report_progress,
+   * report_step) in real time without waiting for the 4s REST poll.
+   */
+  private async emitSyntheticDispatch(
+    card: Card,
+    fromRole: SessionRole,
+    kind: DispatchKind,
+    body: string,
+  ): Promise<void> {
+    const seq = await this.nextSeq()
+    const ts = Date.now()
+    const item: FeedItem = {
+      id: crypto.randomUUID(),
+      seq,
+      ts,
+      kind: 'dispatch',
+      project_id: card.project_id,
+      card_id: card.id,
+      from_role: fromRole,
+      dispatch_kind: kind,
+      body,
+    }
+    await this.state.storage.put(`feed:${card.id}:${seq}`, item)
+    await this.state.storage.put(`feed_index:${seq}`, {
+      card_id: card.id,
+      ts,
+      kind: 'dispatch',
+    })
+    await this.evictFeedIfNeeded(card.id)
+    await this.evictFeedIndexIfNeeded()
+    await this.broadcastFeed(item)
+  }
+
+  private async pairPendingCommittingTo(cardId: string, requestToolCallId: string): Promise<void> {
+    const all = (await this.state.storage.list<CommittingAlarmRecord>({
+      prefix: 'alarm:',
+    })) as Map<string, CommittingAlarmRecord>
+    for (const [key, rec] of all) {
+      if (rec.card_id === cardId && !rec.paired_request_tool_call_id) {
+        rec.paired_request_tool_call_id = requestToolCallId
+        await this.state.storage.put(key, rec)
+        return
+      }
+    }
+  }
+
+  private async maybeSetAlarm(deadline: number): Promise<void> {
+    const next = (await this.state.storage.get<number>('alarm_next')) ?? Number.POSITIVE_INFINITY
+    if (deadline < next) {
+      await this.state.storage.setAlarm(deadline)
+      await this.state.storage.put('alarm_next', deadline)
+    }
+  }
+
+  private async nextSeq(): Promise<number> {
+    const cur = (await this.state.storage.get<number>('feed_seq')) ?? 0
+    const next = cur + 1
+    await this.state.storage.put('feed_seq', next)
+    return next
+  }
+
+  private async evictFeedIfNeeded(card_id: string): Promise<void> {
+    const m = (await this.state.storage.list<FeedItem>({
+      prefix: `feed:${card_id}:`,
+    })) as Map<string, FeedItem>
+    if (m.size <= FEED_CAP_PER_CARD) return
+    const keys = [...m.keys()].sort()
+    const toDrop = keys.slice(0, m.size - FEED_CAP_PER_CARD)
+    for (const k of toDrop) await this.state.storage.delete(k)
+  }
+
+  private async evictFeedIndexIfNeeded(): Promise<void> {
+    const m = (await this.state.storage.list({ prefix: 'feed_index:' })) as Map<string, unknown>
+    if (m.size <= FEED_INDEX_CAP) return
+    const keys = [...m.keys()].sort()
+    const toDrop = keys.slice(0, m.size - FEED_INDEX_CAP)
+    for (const k of toDrop) await this.state.storage.delete(k)
+  }
+
+  private async appendCardStateFeed(
+    project_id: string,
+    card_id: string,
+    from: CardStatus,
+    to: CardStatus,
+  ): Promise<void> {
+    const seq = await this.nextSeq()
+    const ts = Date.now()
+    const item: FeedItem = {
+      id: crypto.randomUUID(),
+      seq,
+      ts,
+      kind: 'card_state',
+      project_id,
+      card_id,
+      from,
+      to,
+    }
+    await this.state.storage.put(`feed:${card_id}:${seq}`, item)
+    await this.state.storage.put(`feed_index:${seq}`, { card_id, ts, kind: 'card_state' })
+    await this.evictFeedIfNeeded(card_id)
+    await this.evictFeedIndexIfNeeded()
+    await this.broadcastFeed(item)
+  }
+
+  // ─── Phase 1.5 — peer routing via MachineDO snapshot ───────────────────
+  private async routePeerMessage(opts: {
+    from_role: SessionRole
+    to_role: SessionRole
+    dispatch_kind: DispatchKind
+    body: string
+    project_id: string
+    branch: string
+    card_id: string
+  }): Promise<void> {
+    const machine_id = await this.findPeerMachine(opts.project_id, opts.branch, opts.to_role)
+    if (!machine_id) return
+    await this.sendToMachine(machine_id, {
+      type: 'push_event',
+      project_id: opts.project_id,
+      branch: opts.branch,
+      channel_event: {
+        content: opts.body,
+        meta: {
+          project_id: opts.project_id,
+          branch: opts.branch,
+          card_id: opts.card_id,
+          role: opts.to_role,
+          event_kind: 'peer_message',
+          from_role: opts.from_role,
+          dispatch_kind: opts.dispatch_kind,
+        },
+      },
+    })
+  }
+
+  private async findPeerMachine(
+    project_id: string,
+    branch: string,
+    role: SessionRole,
+  ): Promise<string | null> {
+    const machine_id = await this.state.storage.get<string>('machine_id')
+    if (!machine_id) return null
+    const stub = this.env.MACHINE_DO.get(this.env.MACHINE_DO.idFromName(machine_id))
+    try {
+      const res = await stub.fetch('https://internal/sessions_live')
+      if (!res.ok) return null
+      const body = (await res.json()) as {
+        sessions: Array<{ project_id: string; branch: string; role: SessionRole }>
+      }
+      const hit = body.sessions.find(
+        (s) => s.project_id === project_id && s.branch === branch && s.role === role,
+      )
+      return hit ? machine_id : null
+    } catch {
+      return null
+    }
+  }
+
+  // ─── Phase 2 — broadcast to UserDO ─────────────────────────────────────
+  private async broadcastFeed(item: FeedItem): Promise<void> {
+    if (!this.env.USER_DO) return
+    const stub = this.env.USER_DO.get(this.env.USER_DO.idFromName('__me__'))
+    try {
+      await stub.fetch('https://internal/__broadcast', {
+        method: 'POST',
+        body: JSON.stringify({ project_id: item.project_id, item }),
+        headers: { 'content-type': 'application/json' },
+      })
+    } catch (err) {
+      console.error('broadcastFeed failed', err)
+    }
+  }
+
+  private async feedReplay(sinceSeq: number): Promise<FeedItem[]> {
+    const m = (await this.state.storage.list<FeedItem>({ prefix: 'feed:' })) as Map<
+      string,
+      FeedItem
+    >
+    return [...m.values()].filter((i) => i.seq > sinceSeq).sort((a, b) => a.seq - b.seq)
+  }
+
+  // ─── Phase 3 — permission allowlist ────────────────────────────────────
+  private async applyPermissionRequest(
+    msg: Extract<BunToWorker, { type: 'permission_request' }>,
+  ): Promise<void> {
+    const fp = await fingerprint(msg.tool_name, msg.input_preview)
+
+    // forever scope hits short-circuit regardless of branch.
+    const forever = await this.state.storage.get<AllowlistRow>(foreverKey(fp))
+    if (forever) {
+      await this.respondToPermission(msg.request_id, 'allow')
+      return
+    }
+    // branch scope is keyed including branch in storage key.
+    const onBranch = await this.state.storage.get<AllowlistRow>(branchKey(fp, msg.branch))
+    if (onBranch) {
+      await this.respondToPermission(msg.request_id, 'allow')
+      return
+    }
+
+    // Miss — record pending and surface to UI.
+    const seq = await this.nextSeq()
+    const ts = Date.now()
+    const pending: PendingPermission = {
+      request_id: msg.request_id,
+      project_id: msg.project_id,
+      branch: msg.branch,
+      tool_name: msg.tool_name,
+      description: msg.description,
+      input_preview: msg.input_preview,
+      fingerprint: fp,
+      asked_at: ts,
+      feed_seq: seq,
+    }
+    await this.state.storage.put(`pending_perms:${msg.request_id}`, pending)
+
+    const item: FeedItem = {
+      id: crypto.randomUUID(),
+      seq,
+      ts,
+      kind: 'perm_ask',
+      project_id: msg.project_id,
+      request_id: msg.request_id,
+      tool_name: msg.tool_name,
+      description: msg.description,
+      input_preview: msg.input_preview,
+    }
+    // perm_ask isn't tied to a specific card — bucket under request_id so
+    // eviction logic (per-card prefix) doesn't swallow it.
+    await this.state.storage.put(`feed:_perm_${msg.request_id}:${seq}`, item)
+    await this.state.storage.put(`feed_index:${seq}`, {
+      card_id: null,
+      ts,
+      kind: 'perm_ask',
+    })
+    await this.evictFeedIndexIfNeeded()
+    await this.broadcastFeed(item)
+  }
+
+  private async applyUiPermissionVerdict(body: {
+    request_id: string
+    behavior: 'allow' | 'deny'
+    scope: 'once' | 'branch' | 'forever'
+  }): Promise<void> {
+    const pending = await this.state.storage.get<PendingPermission>(
+      `pending_perms:${body.request_id}`,
+    )
+    if (!pending) return
+
+    if (body.behavior === 'allow' && body.scope !== 'once') {
+      const row: AllowlistRow = { tool_name: pending.tool_name, granted_at: Date.now() }
+      if (body.scope === 'forever') {
+        await this.state.storage.put(foreverKey(pending.fingerprint), row)
+      } else {
+        await this.state.storage.put(branchKey(pending.fingerprint, pending.branch), row)
+      }
+    }
+
+    await this.respondToPermission(pending.request_id, body.behavior)
+    await this.state.storage.delete(`pending_perms:${body.request_id}`)
+
+    // Mark the existing perm_ask feed item as resolved + rebroadcast.
+    const feedKey = `feed:_perm_${pending.request_id}:${pending.feed_seq}`
+    const item = await this.state.storage.get<FeedItem>(feedKey)
+    if (item && item.kind === 'perm_ask') {
+      item.resolved = { behavior: body.behavior, scope: body.scope, at: Date.now() }
+      await this.state.storage.put(feedKey, item)
+      await this.broadcastFeed(item)
+    }
+  }
+
+  private async respondToPermission(request_id: string, behavior: 'allow' | 'deny'): Promise<void> {
+    const machine_id = await this.state.storage.get<string>('machine_id')
+    if (!machine_id) return
+    await this.sendToMachine(machine_id, {
+      type: 'permission_verdict',
+      request_id,
+      behavior,
+    })
   }
 }
