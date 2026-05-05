@@ -691,6 +691,41 @@ export const indexHtml = /* html */ `<!doctype html>
     100% { left: 100%; }
   }
 
+  .thinking {
+    display: flex; align-items: center; gap: 10px;
+    margin: 4px 0 14px;
+    padding: 8px 12px;
+    border: 1px dashed var(--rule-2);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--paper) 60%, transparent);
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+    letter-spacing: .04em;
+  }
+  .thinking .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    animation: thinkpulse 1.2s ease-in-out infinite;
+    flex: 0 0 auto;
+  }
+  .thinking .label { flex: 0 0 auto; }
+  .thinking .bar {
+    flex: 1; height: 2px; min-width: 60px; max-width: 160px;
+    border-radius: 2px;
+    background: var(--rule-3);
+    overflow: hidden; position: relative;
+  }
+  .thinking .bar::after {
+    content: ''; position: absolute;
+    top: 0; left: -40%; width: 40%; height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    animation: meprog 1.4s ease-in-out infinite;
+  }
+  @keyframes thinkpulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1.1); }
+  }
+
   /* state line + tool call */
   .state-line {
     padding: 6px 4px; font-size: 10.5px; color: var(--muted);
@@ -761,7 +796,7 @@ export const indexHtml = /* html */ `<!doctype html>
     background: color-mix(in srgb, var(--paper) 60%, transparent);
     border: 1px dashed var(--muted-2); border-radius: 8px;
     padding: 8px 28px 8px 11px; margin-bottom: 8px;
-    font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
     line-height: 1.55;
   }
   .composer .tmux-notice .dismiss {
@@ -774,7 +809,7 @@ export const indexHtml = /* html */ `<!doctype html>
   .composer .tmux-notice b { color: var(--ink); font-weight: 700; }
   .composer .tmux-notice kbd {
     background: var(--paper-3); border: 1px solid var(--ink); padding: 1px 5px;
-    border-radius: 4px; font-family: var(--mono); font-size: 10px; color: var(--ink);
+    border-radius: 4px; font-family: var(--mono); font-size: 11.5px; color: var(--ink);
     box-shadow: 0 1px 0 var(--ink);
   }
   .composer .input-row {
@@ -807,7 +842,7 @@ export const indexHtml = /* html */ `<!doctype html>
   .composer .send:hover:not(:disabled) { transform: translateY(-1px); }
   .composer .send:disabled { background: var(--muted-2); cursor: default; box-shadow: none; }
   .composer .hint {
-    font-family: var(--mono); font-size: 9.5px; color: var(--muted);
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
     letter-spacing: .04em; text-align: right; margin-top: 4px;
     padding-right: 50px;
   }
@@ -1339,6 +1374,7 @@ export const indexHtml = /* html */ `<!doctype html>
     focusKey: null,      // \`\${project_id}:\${card_id}\`
     userMessages: new Map(), // card_key → [{ ts, body, pending, id }]
     pendingSends: new Map(), // id → msg (awaiting redirect_ack)
+    awaitingClaude: new Map(), // card_key → since-ts (clear on next dispatch)
     filter: localStorage.getItem(LS_FILTER) || 'all',
     reconnectMs: 1000,
   }
@@ -1481,6 +1517,10 @@ export const indexHtml = /* html */ `<!doctype html>
         m.pending = false
         if (!msg.ok) {
           m.failed = true
+          // The worker rejected the send; nothing will be working on it.
+          for (const [k, since] of state.awaitingClaude) {
+            if (since === m.ts) state.awaitingClaude.delete(k)
+          }
           toast('send failed' + (msg.reason ? ': ' + msg.reason : ''))
         }
         renderAll()
@@ -1504,6 +1544,11 @@ export const indexHtml = /* html */ `<!doctype html>
       } else if (pendingIdx < 0) {
         state.pendingPerms.push(item)
       }
+    }
+    if (item.project_id && item.card_id) {
+      const key = item.project_id + ':' + item.card_id
+      const since = state.awaitingClaude.get(key)
+      if (since != null && item.ts >= since) state.awaitingClaude.delete(key)
     }
   }
 
@@ -1810,6 +1855,11 @@ export const indexHtml = /* html */ `<!doctype html>
     const localPending = state.pendingPerms.filter((p) => p.project_id === pid && p.card_id === cid)
     for (const p of localPending) dom.thread.appendChild(renderDecision(p))
 
+    // Suppressed when a permission decision is showing — that's the clearer signal.
+    if (state.awaitingClaude.has(state.focusKey) && localPending.length === 0) {
+      dom.thread.appendChild(renderThinking())
+    }
+
     if (orderedAll.length === 0 && localPending.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'pane-empty'
@@ -1880,6 +1930,16 @@ export const indexHtml = /* html */ `<!doctype html>
     if (item.kind === 'perm_ask' && item.resolved) return renderResolvedPerm(item)
     if (item.kind === 'perm_ask') return null // pinned at bottom
     return renderDispatch(item)
+  }
+
+  function renderThinking() {
+    const el = document.createElement('div')
+    el.className = 'thinking'
+    el.innerHTML =
+      '<span class="pulse" aria-hidden="true"></span>' +
+      '<span class="label">claude is working…</span>' +
+      '<span class="bar" aria-hidden="true"></span>'
+    return el
   }
 
   function renderCardState(item) {
@@ -2035,6 +2095,7 @@ export const indexHtml = /* html */ `<!doctype html>
       msg.failed = true
       toast('not connected')
     } else {
+      state.awaitingClaude.set(state.focusKey, msg.ts)
       // Stay pending until the worker acks. Fail safe via timeout if the
       // ack never arrives (network blip, DO eviction, etc.) so the bubble
       // doesn't lie about "sending…" forever.
@@ -2042,6 +2103,7 @@ export const indexHtml = /* html */ `<!doctype html>
         if (!msg.pending) return
         msg.pending = false
         msg.failed = true
+        state.awaitingClaude.delete(pid + ':' + cid)
         toast('send timed out')
         renderPane()
       }, 15000)
