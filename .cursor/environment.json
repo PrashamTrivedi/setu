@@ -1,0 +1,15 @@
+{
+  // Cursor Cloud Agent environment (https://cursor.com/docs/cloud-agent/setup)
+  // Runtime: bun. Bun is installed in `install` when this repo uses it.
+  // Secrets cannot live in this file — add names below in the Cursor dashboard Secrets tab.
+  // BUN_SHARED_TOKEN, UI_BEARER
+  "name": "setu",
+  "install": "export BUN_INSTALL=\"$HOME/.bun\"; export PATH=\"$BUN_INSTALL/bin:$PATH\"; command -v bun >/dev/null 2>&1 || curl -fsSL https://bun.sh/install | bash; export PATH=\"$HOME/.bun/bin:$PATH\" && bun run setup:local",
+  "start": "export BUN_INSTALL=\"$HOME/.bun\"; export PATH=\"$BUN_INSTALL/bin:$PATH\"; bun run dev",
+  "ports": [
+    {
+      "name": "worker",
+      "port": 8787
+    }
+  ]
+}
